@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  PARENT
+}
+
+enum RecordType {
+  LEARNING
+  LIFE
+  HEALTH
+  BEHAVIOR
+  ARTWORK
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String
+  phone     String?
+  role      UserRole
+  avatar    String?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  teacherClasses Class[]
+  growthRecords  GrowthRecord[]
+  formSubmissions FormSubmission[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Student {
+  id          String    @id @default(uuid())
+  name        String
+  gender      String
+  birthday    DateTime
+  enrollDate  DateTime
+  avatar      String?
+  allergies   String?
+  address     String?
+
+  classId     String
+  class       Class     @relation(fields: [classId], references: [id])
+
+  parents     StudentParent[]
+  growthRecords GrowthRecord[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([classId])
+  @@index([name])
+}
+
+model Parent {
+  id          String    @id @default(uuid())
+  name        String
+  phone       String
+  email       String?
+  relation    String
+
+  students    StudentParent[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([phone])
+}
+
+model StudentParent {
+  studentId   String
+  parentId    String
+  isPrimary   Boolean   @default(false)
+
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent      Parent    @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@id([studentId, parentId])
+}
+
+model Class {
+  id          String    @id @default(uuid())
+  name        String
+  grade       String
+  capacity    Int       @default(30)
+
+  teacherId   String
+  teacher     User      @relation(fields: [teacherId], references: [id])
+
+  students    Student[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([teacherId])
+  @@index([grade])
+}
+
+model GrowthRecord {
+  id          String      @id @default(uuid())
+  studentId   String
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  type        RecordType
+  category    String?
+  title       String
+  content     String
+  images      String[]
+  tags        String[]
+
+  height      Float?
+  weight      Float?
+
+  recordedBy  String
+  teacher     User        @relation(fields: [recordedBy], references: [id])
+  recordedAt  DateTime    @default(now())
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  @@index([studentId, recordedAt])
+  @@index([type])
+  @@index([recordedAt])
+}
+
+model Ingredient {
+  id          String    @id @default(uuid())
+  name        String
+  unit        String
+  protein     Float     @default(0)
+  fat         Float     @default(0)
+  carbs       Float     @default(0)
+  calories    Float     @default(0)
+  vitamins    String?
+  cost        Float     @default(0)
+
+  dishIngredients DishIngredient[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([name])
+}
+
+model Dish {
+  id          String    @id @default(uuid())
+  name        String
+  category    String
+  price       Float     @default(0)
+
+  ingredients DishIngredient[]
+  menuDishes  MenuDish[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([name])
+  @@index([category])
+}
+
+model DishIngredient {
+  id          String    @id @default(uuid())
+  dishId      String
+  dish        Dish      @relation(fields: [dishId], references: [id], onDelete: Cascade)
+
+  ingredientId String
+  ingredient  Ingredient @relation(fields: [ingredientId], references: [id])
+
+  quantity    Float
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([dishId])
+  @@index([ingredientId])
+}
+
+model Menu {
+  id          String    @id @default(uuid())
+  date        DateTime
+  mealType    MealType
+
+  dishes      MenuDish[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([date])
+  @@index([mealType])
+}
+
+model MenuDish {
+  id          String    @id @default(uuid())
+  menuId      String
+  menu        Menu      @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  dishId      String
+  dish        Dish      @relation(fields: [dishId], references: [id])
+
+  servings    Int       @default(1)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([menuId])
+  @@index([dishId])
+}
+
+model FormTemplate {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  fields      Json
+  isActive    Boolean   @default(true)
+
+  submissions FormSubmission[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([title])
+}
+
+model FormSubmission {
+  id          String    @id @default(uuid())
+  templateId  String
+  template    FormTemplate @relation(fields: [templateId], references: [id])
+
+  submittedBy String
+  user        User      @relation(fields: [submittedBy], references: [id])
+
+  data        Json
+  status      ApprovalStatus @default(PENDING)
+
+  approvals   Approval[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([templateId])
+  @@index([submittedBy])
+  @@index([status])
+}
+
+model Approval {
+  id          String    @id @default(uuid())
+  submissionId String
+  submission  FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  approverId  String
+  status      ApprovalStatus @default(PENDING)
+  comment     String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([submissionId])
+  @@index([approverId])
+}
+
+model ReportTemplate {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  query       String
+  template    String
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([name])
+}

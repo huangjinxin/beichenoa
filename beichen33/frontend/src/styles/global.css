@@ -1,0 +1,44 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 20mm 15mm;
+  }
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-container {
+    page-break-inside: avoid;
+  }
+
+  .print-header,
+  .print-footer {
+    position: fixed;
+  }
+
+  .print-header {
+    top: 0;
+  }
+
+  .print-footer {
+    bottom: 0;
+  }
+}
