@@ -216,20 +216,41 @@ export default function FillForm() {
       // 处理日期字段，转换为字符串
       const processedData: any = {};
       Object.keys(values).forEach(key => {
-        if (dayjs.isDayjs(values[key])) {
-          processedData[key] = values[key].toISOString();
-        } else {
-          processedData[key] = values[key];
+        const value = values[key];
+        if (dayjs.isDayjs(value)) {
+          // 转换为 YYYY-MM-DD 格式，而不是 ISO 字符串
+          processedData[key] = value.format('YYYY-MM-DD');
+        } else if (value !== undefined && value !== null && value !== '') {
+          // 只包含有值的字段
+          processedData[key] = value;
         }
+        // undefined、null、空字符串的字段不包含在提交数据中
       });
+
+      // 验证明细表是否有必填字段
+      const config = template?.detailTableConfig as any;
+      if (config?.enabled && config?.columns) {
+        const requiredColumns = config.columns.filter((col: any) => col.required);
+        if (detailData.length > 0 && requiredColumns.length > 0) {
+          for (const row of detailData) {
+            for (const col of requiredColumns) {
+              if (!row[col.id] && row[col.id] !== 0) {
+                message.error(`明细表中的 "${col.label}" 为必填项`);
+                return;
+              }
+            }
+          }
+        }
+      }
 
       submitMutation.mutate({
         templateId: templateId!,
         formData: processedData,
         detailData: detailData.map(({ key, ...rest }) => rest), // 移除key字段
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('表单验证失败:', error);
+      message.error('请检查表单填写是否完整');
     }
   };
 
