@@ -8,6 +8,12 @@ import {
   FileTextOutlined,
   BarChartOutlined,
   LogoutOutlined,
+  HomeOutlined,
+  GiftOutlined,
+  ShopOutlined,
+  ShoppingCartOutlined,
+  SettingOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/auth';
@@ -22,31 +28,61 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
 
   const menuItems = [
-    { key: '/', icon: <DashboardOutlined />, label: t('menu.dashboard') },
-    { key: '/students', icon: <UserOutlined />, label: t('menu.students') },
-    { key: '/teachers', icon: <TeamOutlined />, label: '教师管理' },
-    { key: '/classes', icon: <TeamOutlined />, label: t('menu.classes') },
+    { key: '/', icon: <DashboardOutlined />, label: '首页' },
+    {
+      key: '/personnel',
+      icon: <TeamOutlined />,
+      label: '人员管理',
+      children: [
+        { key: '/students', icon: <UserOutlined />, label: '学生管理' },
+        { key: '/teachers', icon: <TeamOutlined />, label: '教师管理' },
+        { key: '/classes', icon: <TeamOutlined />, label: '班级管理' },
+        { key: '/birthday', icon: <GiftOutlined />, label: '生日管理' },
+        { key: '/campus', icon: <HomeOutlined />, label: '分校管理' },
+        { key: '/positions', icon: <TeamOutlined />, label: '职位管理' },
+      ],
+    },
     {
       key: '/canteen',
       icon: <RestOutlined />,
-      label: t('menu.canteen'),
+      label: '食堂管理',
       children: [
-        { key: '/canteen/ingredients', label: t('menu.ingredients') },
-        { key: '/canteen/dishes', label: t('menu.dishes') },
-        { key: '/canteen/menus', label: t('menu.menus') },
-        { key: '/canteen/nutrition', label: t('menu.nutrition') },
+        { key: '/canteen/ingredients', label: '食材管理' },
+        { key: '/canteen/dishes', label: '菜品管理' },
+        { key: '/canteen/menus', label: '食谱管理' },
+        { key: '/canteen/nutrition-standards', label: '营养标准配置' },
+        { key: '/canteen/suppliers', icon: <ShopOutlined />, label: '供应商管理' },
+        { key: '/canteen/purchase/plans', icon: <ShoppingCartOutlined />, label: '采购计划管理' },
       ],
     },
     {
       key: '/forms',
       icon: <FileTextOutlined />,
-      label: t('menu.forms'),
+      label: '表单管理',
       children: [
-        { key: '/forms/templates', label: t('menu.formTemplates') },
-        { key: '/forms/submissions', label: t('menu.formSubmissions') },
+        { key: '/forms/templates', label: '表单模板' },
+        { key: '/forms/submissions', label: '表单提交' },
+        { key: '/forms/approvals', label: '我的审批' },
       ],
     },
-    { key: '/reports', icon: <BarChartOutlined />, label: t('menu.reports') },
+    {
+      key: '/records',
+      icon: <FileTextOutlined />,
+      label: '日常记录',
+      children: [
+        { key: '/records/daily-observation', label: '每日观察' },
+        { key: '/records/duty-report', label: '值班播报' },
+      ],
+    },
+    { key: '/reports', icon: <BarChartOutlined />, label: '报表统计' },
+    {
+      key: '/system',
+      icon: <SettingOutlined />,
+      label: '系统配置',
+      children: [
+        { key: '/system/api', icon: <ApiOutlined />, label: 'API文档' },
+      ],
+    },
   ];
 
   const handleLogout = () => {
@@ -77,7 +113,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <LanguageSwitcher />
             <span>{user?.name}</span>
             <Button icon={<LogoutOutlined />} onClick={handleLogout}>
-              {t('auth.logout')}
+              退出登录
             </Button>
           </div>
         </Header>

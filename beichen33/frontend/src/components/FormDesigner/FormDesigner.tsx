@@ -4,7 +4,7 @@ import { PlusOutlined, DeleteOutlined, EditOutlined, ArrowUpOutlined, ArrowDownO
 
 export interface FormField {
   id: string;
-  type: 'text' | 'textarea' | 'number' | 'radio' | 'checkbox' | 'select' | 'date' | 'datetime';
+  type: 'text' | 'textarea' | 'number' | 'radio' | 'checkbox' | 'select' | 'date' | 'datetime' | 'teacher_select' | 'approval';
   label: string;
   placeholder?: string;
   required: boolean;

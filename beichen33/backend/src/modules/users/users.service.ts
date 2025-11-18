@@ -15,9 +15,22 @@ export class UsersService {
         email: true,
         name: true,
         phone: true,
+        idCard: true,
         role: true,
         avatar: true,
         isActive: true,
+        gender: true,
+        birthday: true,
+        hireDate: true,
+        resignationDate: true,
+        employmentStatus: true,
+        campusId: true,
+        campus: {
+          select: { id: true, name: true },
+        },
+        position: {
+          select: { id: true, name: true, type: true, level: true },
+        },
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -26,7 +39,6 @@ export class UsersService {
   }
 
   async create(data: any) {
-    // Hash password if provided, otherwise use default password
     const password = data.password || '123456';
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -40,9 +52,21 @@ export class UsersService {
         email: true,
         name: true,
         phone: true,
+        idCard: true,
         role: true,
         avatar: true,
         isActive: true,
+        gender: true,
+        birthday: true,
+        hireDate: true,
+        resignationDate: true,
+        employmentStatus: true,
+        campus: {
+          select: { id: true, name: true },
+        },
+        position: {
+          select: { id: true, name: true, type: true, level: true },
+        },
         createdAt: true,
       },
     });
@@ -56,9 +80,21 @@ export class UsersService {
         email: true,
         name: true,
         phone: true,
+        idCard: true,
         role: true,
         avatar: true,
         isActive: true,
+        gender: true,
+        birthday: true,
+        hireDate: true,
+        resignationDate: true,
+        employmentStatus: true,
+        campus: {
+          select: { id: true, name: true },
+        },
+        position: {
+          select: { id: true, name: true, type: true, level: true },
+        },
         createdAt: true,
       },
     });
@@ -76,9 +112,21 @@ export class UsersService {
         email: true,
         name: true,
         phone: true,
+        idCard: true,
         role: true,
         avatar: true,
         isActive: true,
+        gender: true,
+        birthday: true,
+        hireDate: true,
+        resignationDate: true,
+        employmentStatus: true,
+        campus: {
+          select: { id: true, name: true },
+        },
+        position: {
+          select: { id: true, name: true, type: true, level: true },
+        },
       },
     });
   }

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Form, Input, Button, Card, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -9,17 +10,31 @@ import LanguageSwitcher from '../components/LanguageSwitcher/LanguageSwitcher';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { setAuth } = useAuthStore();
+  const { token, setAuth } = useAuthStore();
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (token) {
+      console.log('Already logged in, redirecting to dashboard');
+      navigate('/');
+    }
+  }, [token, navigate]);
 
   const loginMutation = useMutation({
     mutationFn: ({ email, password }: any) => authApi.login(email, password),
     onSuccess: (data: any) => {
-      setAuth(data.access_token, data.user);
-      message.success(t('auth.loginSuccess'));
-      navigate('/');
+      console.log('Login response:', data);
+      if (data && data.access_token && data.user) {
+        setAuth(data.access_token, data.user);
+        message.success(t('auth.loginSuccess'));
+        navigate('/');
+      } else {
+        console.error('Invalid login response structure:', data);
+        message.error('Invalid response from server');
+      }
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Login error:', error);
       message.error(t('auth.loginFailed'));
     },
   });

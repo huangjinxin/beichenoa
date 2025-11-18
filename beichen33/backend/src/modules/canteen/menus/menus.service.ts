@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 
+interface NutritionSummary {
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+}
+
 @Injectable()
 export class MenusService {
   constructor(private prisma: PrismaService) {}
@@ -8,11 +15,12 @@ export class MenusService {
   async findByDate(date: string) {
     return this.prisma.menu.findMany({
       where: {
-        date: new Date(date),
+        startDate: { lte: new Date(date) },
+        endDate: { gte: new Date(date) },
         deletedAt: null,
       },
       include: {
-        dishes: {
+        menuItems: {
           include: {
             dish: {
               include: {
@@ -24,7 +32,7 @@ export class MenusService {
           },
         },
       },
-      orderBy: { mealType: 'asc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -32,7 +40,7 @@ export class MenusService {
     const menu = await this.prisma.menu.findUnique({
       where: { id },
       include: {
-        dishes: {
+        menuItems: {
           include: {
             dish: {
               include: {
@@ -48,14 +56,14 @@ export class MenusService {
 
     if (!menu) return null;
 
-    const nutrition = menu.dishes.reduce(
-      (acc, md) => {
-        md.dish.ingredients.forEach((di) => {
-          const ratio = (di.quantity / 100) * md.servings;
-          acc.protein += di.ingredient.protein * ratio;
-          acc.fat += di.ingredient.fat * ratio;
-          acc.carbs += di.ingredient.carbs * ratio;
-          acc.calories += di.ingredient.calories * ratio;
+    const nutrition = menu.menuItems.reduce(
+      (acc: NutritionSummary, menuItem: any) => {
+        menuItem.dish.ingredients.forEach((dishIngredient: any) => {
+          const ratio = dishIngredient.amount / 100;
+          acc.protein += dishIngredient.ingredient.protein * ratio;
+          acc.fat += dishIngredient.ingredient.fat * ratio;
+          acc.carbs += dishIngredient.ingredient.carbs * ratio;
+          acc.calories += dishIngredient.ingredient.calories * ratio;
         });
         return acc;
       },
@@ -66,23 +74,36 @@ export class MenusService {
   }
 
   async create(data: any) {
-    const { dishes, ...menuData } = data;
+    const { menuItems, items, ...menuData } = data;
+    const itemsToCreate = items || menuItems;
 
     return this.prisma.$transaction(async (tx) => {
       const menu = await tx.menu.create({
         data: {
-          ...menuData,
-          date: new Date(menuData.date),
+          name: menuData.name,
+          startDate: new Date(menuData.startDate),
+          endDate: new Date(menuData.endDate),
+          grade: menuData.grade || null,
+          teacherId: menuData.teacherId || null,
         },
       });
 
-      if (dishes?.length) {
-        await tx.menuDish.createMany({
-          data: dishes.map((d: any) => ({
-            menuId: menu.id,
-            dishId: d.dishId,
-            servings: d.servings || 1,
-          })),
+      if (itemsToCreate?.length) {
+        const menuItemsData: any[] = [];
+        itemsToCreate.forEach((item: any) => {
+          const dishIds = item.dishIds || [item.dishId];
+          dishIds.forEach((dishId: string) => {
+            menuItemsData.push({
+              menuId: menu.id,
+              dishId: dishId,
+              day: item.day,
+              mealType: item.mealType,
+            });
+          });
+        });
+
+        await tx.menuItem.createMany({
+          data: menuItemsData,
         });
       }
 
@@ -91,24 +112,41 @@ export class MenusService {
   }
 
   async update(id: string, data: any) {
-    const { dishes, ...menuData } = data;
+    const { menuItems, items, ...menuData } = data;
+    const itemsToUpdate = items || menuItems;
 
     return this.prisma.$transaction(async (tx) => {
+      const updateData: any = {};
+      if (menuData.name) updateData.name = menuData.name;
+      if (menuData.startDate) updateData.startDate = new Date(menuData.startDate);
+      if (menuData.endDate) updateData.endDate = new Date(menuData.endDate);
+      if (menuData.grade !== undefined) updateData.grade = menuData.grade || null;
+      if (menuData.teacherId !== undefined) updateData.teacherId = menuData.teacherId || null;
+
       const menu = await tx.menu.update({
         where: { id },
-        data: menuData.date ? { ...menuData, date: new Date(menuData.date) } : menuData,
+        data: updateData,
       });
 
-      if (dishes !== undefined) {
-        await tx.menuDish.deleteMany({ where: { menuId: id } });
+      if (itemsToUpdate !== undefined) {
+        await tx.menuItem.deleteMany({ where: { menuId: id } });
 
-        if (dishes?.length) {
-          await tx.menuDish.createMany({
-            data: dishes.map((d: any) => ({
-              menuId: id,
-              dishId: d.dishId,
-              servings: d.servings || 1,
-            })),
+        if (itemsToUpdate?.length) {
+          const menuItemsData: any[] = [];
+          itemsToUpdate.forEach((item: any) => {
+            const dishIds = item.dishIds || [item.dishId];
+            dishIds.forEach((dishId: string) => {
+              menuItemsData.push({
+                menuId: id,
+                dishId: dishId,
+                day: item.day,
+                mealType: item.mealType,
+              });
+            });
+          });
+
+          await tx.menuItem.createMany({
+            data: menuItemsData,
           });
         }
       }

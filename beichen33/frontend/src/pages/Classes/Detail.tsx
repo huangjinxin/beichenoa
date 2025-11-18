@@ -36,7 +36,9 @@ export default function ClassDetail() {
         <Descriptions bordered column={2}>
           <Descriptions.Item label="Name">{classData.name}</Descriptions.Item>
           <Descriptions.Item label="Grade">{classData.grade}</Descriptions.Item>
-          <Descriptions.Item label="Teacher">{classData.teacher?.name}</Descriptions.Item>
+          <Descriptions.Item label="Teachers" span={2}>
+            {classData.teachers?.map((t: any) => t.name).join(', ') || '-'}
+          </Descriptions.Item>
           <Descriptions.Item label="Capacity">{classData.capacity}</Descriptions.Item>
           <Descriptions.Item label="Student Count">{classData.students?.length || 0}</Descriptions.Item>
         </Descriptions>

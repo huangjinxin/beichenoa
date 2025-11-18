@@ -1,11 +1,30 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { PrismaService } from '../../prisma.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private prisma: PrismaService,
+  ) {}
+
+  @Get('debug/users')
+  @ApiOperation({ summary: 'Debug: List all users' })
+  async debugUsers() {
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+      take: 10,
+    });
+    return { count: users.length, users };
+  }
 
   @Post('login')
   @ApiOperation({ summary: 'User login' })

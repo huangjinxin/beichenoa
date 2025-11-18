@@ -34,37 +34,134 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum PurchasePlanStatus {
+  DRAFT      // 草稿
+  CONFIRMED  // 已确认
+  ORDERED    // 已下单
+  COMPLETED  // 已完成
+}
+
+enum PositionType {
+  PRINCIPAL
+  VICE_PRINCIPAL
+  DIRECTOR
+  FINANCE
+  TEACHER
+  NURSERY_TEACHER
+  LOGISTICS
+  FRONTLINE
+  OTHER
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  RESIGNED
+  PROBATION
+  SUSPENDED
+}
+
+model Campus {
+  id          String    @id @default(uuid())
+  name        String
+  address     String?
+  phone       String?
+  principalId String?
+  principal   User?     @relation("CampusPrincipal", fields: [principalId], references: [id])
+
+  users       User[]    @relation("CampusUsers")
+  students    Student[]
+  classes     Class[]
+  dailyObservations DailyObservation[] @relation("DailyObservationCampus")
+  dutyReports DutyReport[] @relation("DutyReportCampus")
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([name])
+  @@index([principalId])
+}
+
+model Position {
+  id          String       @id @default(uuid())
+  name        String
+  type        PositionType
+  level       Int
+  parentId    String?
+  parent      Position?    @relation("PositionHierarchy", fields: [parentId], references: [id])
+  children    Position[]   @relation("PositionHierarchy")
+  description String?
+
+  users       User[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  @@index([type])
+  @@index([level])
+  @@index([parentId])
+}
+
 model User {
   id        String    @id @default(uuid())
   email     String    @unique
   password  String
   name      String
   phone     String?
+  idCard    String?
   role      UserRole
   avatar    String?
   isActive  Boolean   @default(true)
+  gender    String?
+  birthday  DateTime?
+  hireDate  DateTime?
+  resignationDate DateTime?
+
+  campusId  String
+  campus    Campus    @relation("CampusUsers", fields: [campusId], references: [id])
+
+  positionId String?
+  position   Position? @relation(fields: [positionId], references: [id])
+
+  employmentStatus EmploymentStatus @default(ACTIVE)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  teacherClasses Class[]
-  growthRecords  GrowthRecord[]
+  classes         Class[]        @relation("ClassTeachers")
+  growthRecords   GrowthRecord[]
   formSubmissions FormSubmission[]
+  principalOfCampus Campus[]     @relation("CampusPrincipal")
+  purchasePlans   PurchasePlan[]
+  dailyObservations DailyObservation[] @relation("DailyObservationTeacher")
+  dutyReports       DutyReport[]       @relation("DutyReportLeader")
 
   @@index([email])
   @@index([role])
+  @@index([campusId])
+  @@index([positionId])
+  @@index([employmentStatus])
 }
 
 model Student {
   id          String    @id @default(uuid())
   name        String
+  idCard      String?
   gender      String
   birthday    DateTime
   enrollDate  DateTime
   avatar      String?
   allergies   String?
   address     String?
+
+  // 采购计划相关字段
+  ageGroup    String?   // 年龄段：2-3/3-4/4-5/5-6/6-7
+  birthDate   DateTime? // 出生日期（用于自动计算年龄段）
+
+  campusId    String
+  campus      Campus    @relation(fields: [campusId], references: [id])
 
   classId     String
   class       Class     @relation(fields: [classId], references: [id])
@@ -78,6 +175,8 @@ model Student {
 
   @@index([classId])
   @@index([name])
+  @@index([campusId])
+  @@index([ageGroup])
 }
 
 model Parent {
@@ -114,18 +213,19 @@ model Class {
   name        String
   grade       String
   capacity    Int       @default(30)
+  campusId    String?
+  campus      Campus?   @relation(fields: [campusId], references: [id])
 
-  teacherId   String
-  teacher     User      @relation(fields: [teacherId], references: [id])
-
+  teachers    User[]    @relation("ClassTeachers")
   students    Student[]
+  dailyObservations DailyObservation[] @relation("DailyObservationClass")
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  @@index([teacherId])
   @@index([grade])
+  @@index([campusId])
 }
 
 model GrowthRecord {
@@ -164,8 +264,20 @@ model Ingredient {
   fat         Float     @default(0)
   carbs       Float     @default(0)
   calories    Float     @default(0)
-  vitamins    String?
+  fiber       Float     @default(0)
+  vitaminA    Float     @default(0)
+  vitaminB1   Float     @default(0)
+  vitaminB2   Float     @default(0)
+  vitaminC    Float     @default(0)
+  calcium     Float     @default(0)
+  iron        Float     @default(0)
+  zinc        Float     @default(0)
+  sodium      Float     @default(0)
   cost        Float     @default(0)
+
+  // 采购计划相关字段
+  supplierCategory String?  // 供应商类别
+  conversionRate   Float?   // 换算率（如：1斤=500克）
 
   dishIngredients DishIngredient[]
 
@@ -174,16 +286,18 @@ model Ingredient {
   deletedAt   DateTime?
 
   @@index([name])
+  @@index([supplierCategory])
 }
 
 model Dish {
   id          String    @id @default(uuid())
   name        String
   category    String
+  description String?
   price       Float     @default(0)
 
   ingredients DishIngredient[]
-  menuDishes  MenuDish[]
+  menuItems   MenuItem[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -201,7 +315,7 @@ model DishIngredient {
   ingredientId String
   ingredient  Ingredient @relation(fields: [ingredientId], references: [id])
 
-  quantity    Float
+  amount      Float     @default(100)
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -212,20 +326,25 @@ model DishIngredient {
 
 model Menu {
   id          String    @id @default(uuid())
-  date        DateTime
-  mealType    MealType
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  grade       String?
+  teacherId   String?
 
-  dishes      MenuDish[]
+  menuItems   MenuItem[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  @@index([date])
-  @@index([mealType])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([grade])
+  @@index([teacherId])
 }
 
-model MenuDish {
+model MenuItem {
   id          String    @id @default(uuid())
   menuId      String
   menu        Menu      @relation(fields: [menuId], references: [id], onDelete: Cascade)
@@ -233,7 +352,8 @@ model MenuDish {
   dishId      String
   dish        Dish      @relation(fields: [dishId], references: [id])
 
-  servings    Int       @default(1)
+  day         String
+  mealType    String
 
   createdAt   DateTime  @default(now())
 
@@ -245,7 +365,26 @@ model FormTemplate {
   id          String    @id @default(uuid())
   title       String
   description String?
-  fields      Json
+
+  // 主表字段配置
+  fields      Json      // 主表字段数组
+
+  // 明细表配置（支持主从表）
+  detailTableConfig Json?  // { enabled: boolean, columns: [...], calculations: [...] }
+
+  // 计算规则配置
+  calculations Json?    // [{ field: "total", formula: "price * quantity" }, { field: "grandTotal", formula: "SUM(details.total)" }]
+
+  // 审批流程配置
+  approvalConfig Json?  // { levels: [{ name: "分管领导", field: "managerOpinion" }, ...] }
+
+  // 流水号配置
+  serialNumberConfig Json? // { prefix: "REPAIR", dateFormat: "YYYY", digits: 3 }
+
+  // 是否为预置模板
+  isPreset    Boolean   @default(false)
+  presetType  String?   // "repair_approval", "purchase_approval" 等
+
   isActive    Boolean   @default(true)
 
   submissions FormSubmission[]
@@ -255,6 +394,8 @@ model FormTemplate {
   deletedAt   DateTime?
 
   @@index([title])
+  @@index([isPreset])
+  @@index([presetType])
 }
 
 model FormSubmission {
@@ -262,11 +403,29 @@ model FormSubmission {
   templateId  String
   template    FormTemplate @relation(fields: [templateId], references: [id])
 
+  // 流水号
+  serialNumber String?   // REPAIR-2024-001
+
   submittedBy String
   user        User      @relation(fields: [submittedBy], references: [id])
 
+  // 主表数据
   data        Json
+
+  // 明细表数据（主从表）
+  detailData  Json?     // [{ id: 1, date: "2024-01-01", location: "教室", price: 100, quantity: 2, total: 200 }, ...]
+
+  // 计算结果
+  calculatedValues Json? // { grandTotal: 1500, itemCount: 5 }
+
+  // 审批状态
   status      ApprovalStatus @default(PENDING)
+
+  // 当前审批节点
+  currentApprovalStep Int @default(0) // 0 表示未开始，1 表示第一级审批，以此类推
+
+  // 当前审批人列表（JSON 数组）
+  currentApprovers Json? // ["userId1", "userId2"]
 
   approvals   Approval[]
 
@@ -277,6 +436,8 @@ model FormSubmission {
   @@index([templateId])
   @@index([submittedBy])
   @@index([status])
+  @@index([serialNumber])
+  @@index([currentApprovalStep])
 }
 
 model Approval {
@@ -284,15 +445,29 @@ model Approval {
   submissionId String
   submission  FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
+  // 审批节点信息
+  step        Int       // 审批步骤（第几级审批）
+  stepName    String    // 审批节点名称（如"分管领导审批"）
+
+  // 审批人信息
   approverId  String
+  approverName String   // 审批人姓名（冗余存储，便于查询）
+
+  // 审批状态和结果
   status      ApprovalStatus @default(PENDING)
-  comment     String?
+  action      String?   // APPROVE（通过）、REJECT（驳回）、RETURN（退回）
+  comment     String?   // 审批意见
+
+  // 审批时间
+  approvedAt  DateTime? // 实际审批时间
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([submissionId])
   @@index([approverId])
+  @@index([status])
+  @@index([step])
 }
 
 model ReportTemplate {
@@ -307,4 +482,171 @@ model ReportTemplate {
   deletedAt   DateTime?
 
   @@index([name])
+}
+
+// 幼儿营养标准（按年龄段）
+model NutritionStandard {
+  id          String   @id @default(uuid())
+  ageGroup    String   @unique // 年龄段：2-3/3-4/4-5/5-6/6-7
+  ageLabel    String   // 显示标签：2-3岁/3-4岁等
+
+  // 每日营养摄入标准（单位：克或毫升）
+  caloriesMin Float    // 最低热量 (kcal)
+  caloriesMax Float    // 最高热量 (kcal)
+  proteinMin  Float    // 蛋白质 (g)
+  proteinMax  Float
+  fatMin      Float    // 脂肪 (g)
+  fatMax      Float
+  carbsMin    Float    // 碳水化合物 (g)
+  carbsMax    Float
+
+  // 三餐分配比例
+  breakfastRatio Float  @default(0.25)  // 早餐 25%
+  lunchRatio     Float  @default(0.40)  // 中餐 40%
+  snackRatio     Float  @default(0.15)  // 午点 15%
+  dinnerRatio    Float  @default(0.20)  // 晚餐 20%
+
+  // 食材用量参考（单位：克/人/餐）
+  grainPerMeal     Float  @default(50)   // 主食类（米面）
+  vegetablePerMeal Float  @default(100)  // 蔬菜类
+  meatPerMeal      Float  @default(50)   // 肉类
+  eggPerMeal       Float  @default(30)   // 蛋类
+  milkPerDay       Float  @default(250)  // 奶类（每日）
+
+  description String?  // 备注说明
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ageGroup])
+}
+
+// 采购计划
+model PurchasePlan {
+  id          String   @id @default(uuid())
+  name        String   // 计划名称，如"2024年11月10日-14日采购计划"
+  startDate   DateTime // 开始日期
+  endDate     DateTime // 结束日期
+
+  menuId      String?  // 关联的菜单ID（可选）
+
+  // 学生统计信息（JSON）
+  studentStats Json    // { "2-3": 15, "3-4": 20, "4-5": 25, ... }
+
+  // 计算结果（JSON）
+  purchaseItems Json   // 采购清单详细数据
+  dailyPurchaseItems Json? // 每日采购明细数据
+
+  status      PurchasePlanStatus @default(DRAFT)
+
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator     User     @relation(fields: [createdBy], references: [id])
+  printRecords PrintToken[] @relation("PurchasePlanPrint")
+
+  @@index([startDate, endDate])
+  @@index([createdBy])
+  @@index([status])
+}
+
+// 供应商管理
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String   // 供应商名称
+  category      String   // 类别：粮油/猪肉/牛肉/蔬菜/调料/面条/鸡蛋/鸡肉/水果/糕点/牛奶/海鲜
+  contactPerson String?  // 联系人
+  contactPhone  String?  // 电话
+  address       String?  // 地址
+  notes         String?  // 备注
+  isActive      Boolean  @default(true)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([category])
+  @@index([name])
+}
+
+// 打印令牌（用于公开访问打印页面）
+model PrintToken {
+  id          String   @id @default(uuid())
+  token       String   @unique // 唯一令牌
+  entityType  String   // 实体类型：purchase_plan/menu等
+  entityId    String   // 实体ID
+
+  expiresAt   DateTime // 过期时间
+  createdAt   DateTime @default(now())
+
+  purchasePlan PurchasePlan? @relation("PurchasePlanPrint", fields: [entityId], references: [id])
+
+  @@index([token])
+  @@index([entityType, entityId])
+  @@index([expiresAt])
+}
+
+// 每日观察记录
+model DailyObservation {
+  id                String   @id @default(uuid())
+  date              DateTime // 日期
+  weather           String   // 天气
+  teacherId         String   // 老师ID
+  classId           String   // 班级ID
+  campusId          String?  // 园区ID
+
+  // 时间日志
+  timeline          Json?    // [{time: "07:00", event: "入园"}]
+
+  // 观察要点
+  lifeActivity      String?  @db.Text // 生活活动
+  outdoorActivity   String?  @db.Text // 户外运动
+  learningActivity  String?  @db.Text // 学习活动
+  gameActivity      String?  @db.Text // 游戏活动
+  wonderfulMoment   String?  @db.Text // 精彩瞬间
+  homeCooperation   String?  @db.Text // 家园共育
+
+  teacher           User     @relation("DailyObservationTeacher", fields: [teacherId], references: [id])
+  class             Class    @relation("DailyObservationClass", fields: [classId], references: [id])
+  campus            Campus?  @relation("DailyObservationCampus", fields: [campusId], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([date])
+  @@index([teacherId])
+  @@index([classId])
+  @@index([campusId])
+}
+
+// 值班播报记录
+model DutyReport {
+  id                String   @id @default(uuid())
+  date              DateTime // 日期
+  weather           String   // 天气
+  dutyLeader        String   // 值班领导姓名（冗余存储）
+  dutyLeaderId      String?  // 值班领导ID（关联教师）
+  campusId          String?  // 园区ID
+
+  // 各项记录
+  attendance        String?  @db.Text // 出勤情况
+  entryExit         String?  @db.Text // 入园离园
+  learningActivity  String?  @db.Text // 学习活动
+  areaActivity      String?  @db.Text // 区域活动
+  outdoorActivity   String?  @db.Text // 户外活动
+  lifeActivity      String?  @db.Text // 生活活动
+  notice            String?  @db.Text // 温馨提示
+  safety            String?  @db.Text // 校园安全
+  other             String?  @db.Text // 其他事项
+
+  campus            Campus?  @relation("DutyReportCampus", fields: [campusId], references: [id])
+  dutyLeaderUser    User?    @relation("DutyReportLeader", fields: [dutyLeaderId], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([date])
+  @@index([campusId])
+  @@index([dutyLeaderId])
 }

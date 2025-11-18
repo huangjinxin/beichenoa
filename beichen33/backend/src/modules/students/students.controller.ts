@@ -10,6 +10,13 @@ import { StudentsService } from './students.service';
 export class StudentsController {
   constructor(private studentsService: StudentsService) {}
 
+  @Get('stats')
+  @ApiOperation({ summary: 'Get student statistics by age group' })
+  getStats(@Query('classIds') classIds?: string) {
+    const ids = classIds ? classIds.split(',').filter(id => id.trim()) : [];
+    return this.studentsService.getStats(ids);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all students' })
   findAll(@Query('classId') classId?: string, @Query('page') page?: string, @Query('limit') limit?: string) {

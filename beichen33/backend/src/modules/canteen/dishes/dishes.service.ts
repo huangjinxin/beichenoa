@@ -53,7 +53,7 @@ export class DishesService {
 
     const nutrition = dishIngredients.reduce(
       (acc, di) => {
-        const ratio = di.quantity / 100;
+        const ratio = di.amount / 100;
         acc.protein += di.ingredient.protein * ratio;
         acc.fat += di.ingredient.fat * ratio;
         acc.carbs += di.ingredient.carbs * ratio;
@@ -67,18 +67,27 @@ export class DishesService {
   }
 
   async create(data: any) {
-    const { ingredients, ...dishData } = data;
+    const { ingredients, ingredientIds, ...dishData } = data;
 
     return this.prisma.$transaction(async (tx) => {
       const dish = await tx.dish.create({ data: dishData });
 
-      if (ingredients?.length) {
+      const ingredientsToCreate = ingredients || ingredientIds;
+      if (ingredientsToCreate?.length) {
+        const ingredientData = Array.isArray(ingredientsToCreate[0]) || typeof ingredientsToCreate[0] === 'object'
+          ? ingredientsToCreate.map((ing: any) => ({
+              dishId: dish.id,
+              ingredientId: ing.ingredientId || ing,
+              amount: ing.amount || 100,
+            }))
+          : ingredientsToCreate.map((id: string) => ({
+              dishId: dish.id,
+              ingredientId: id,
+              amount: 100,
+            }));
+
         await tx.dishIngredient.createMany({
-          data: ingredients.map((ing: any) => ({
-            dishId: dish.id,
-            ingredientId: ing.ingredientId,
-            quantity: ing.quantity,
-          })),
+          data: ingredientData,
         });
       }
 
@@ -87,21 +96,30 @@ export class DishesService {
   }
 
   async update(id: string, data: any) {
-    const { ingredients, ...dishData } = data;
+    const { ingredients, ingredientIds, ...dishData } = data;
 
     return this.prisma.$transaction(async (tx) => {
       const dish = await tx.dish.update({ where: { id }, data: dishData });
 
-      if (ingredients !== undefined) {
+      const ingredientsToUpdate = ingredients !== undefined ? ingredients : ingredientIds;
+      if (ingredientsToUpdate !== undefined) {
         await tx.dishIngredient.deleteMany({ where: { dishId: id } });
 
-        if (ingredients?.length) {
+        if (ingredientsToUpdate?.length) {
+          const ingredientData = Array.isArray(ingredientsToUpdate[0]) || typeof ingredientsToUpdate[0] === 'object'
+            ? ingredientsToUpdate.map((ing: any) => ({
+                dishId: id,
+                ingredientId: ing.ingredientId || ing,
+                amount: ing.amount || 100,
+              }))
+            : ingredientsToUpdate.map((ingId: string) => ({
+                dishId: id,
+                ingredientId: ingId,
+                amount: 100,
+              }));
+
           await tx.dishIngredient.createMany({
-            data: ingredients.map((ing: any) => ({
-              dishId: id,
-              ingredientId: ing.ingredientId,
-              quantity: ing.quantity,
-            })),
+            data: ingredientData,
           });
         }
       }
