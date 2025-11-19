@@ -1,4 +1,5 @@
-import { Layout as AntLayout, Menu, Button } from 'antd';
+import { useState, useEffect } from 'react';
+import { Layout as AntLayout, Menu, Button, Drawer } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DashboardOutlined,
@@ -14,6 +15,8 @@ import {
   ShoppingCartOutlined,
   SettingOutlined,
   ApiOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/auth';
@@ -26,6 +29,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const { t } = useTranslation();
+  const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setCollapsed(true);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const menuItems = [
     { key: '/', icon: <DashboardOutlined />, label: '首页' },
@@ -90,34 +110,118 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     navigate('/login');
   };
 
+  const handleMenuClick = ({ key }: { key: string }) => {
+    navigate(key);
+    if (isMobile) {
+      setDrawerVisible(false);
+    }
+  };
+
+  const toggleCollapsed = () => {
+    if (isMobile) {
+      setDrawerVisible(!drawerVisible);
+    } else {
+      setCollapsed(!collapsed);
+    }
+  };
+
+  const menuContent = (
+    <>
+      <div
+        style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontSize: collapsed && !isMobile ? 14 : 18,
+          fontWeight: 'bold',
+          overflow: 'hidden',
+          transition: 'all 0.2s',
+        }}
+      >
+        {collapsed && !isMobile ? 'BC' : (t('menu.students').includes('学生') ? '北辰幼儿园' : 'Beichen KG')}
+      </div>
+      <Menu
+        theme="dark"
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        items={menuItems}
+        onClick={handleMenuClick}
+        inlineCollapsed={collapsed && !isMobile}
+      />
+    </>
+  );
+
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Sider width={200} theme="dark">
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 18, fontWeight: 'bold' }}>
-          {t('menu.students').includes('学生') ? '北辰幼儿园' : 'Beichen KG'}
-        </div>
-        <Menu
+      {isMobile ? (
+        <Drawer
+          placement="left"
+          onClose={() => setDrawerVisible(false)}
+          open={drawerVisible}
+          styles={{ body: { padding: 0, background: '#001529' } }}
+          width={200}
+        >
+          {menuContent}
+        </Drawer>
+      ) : (
+        <Sider
+          width={200}
           theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-        />
-      </Sider>
+          collapsible
+          collapsed={collapsed}
+          trigger={null}
+          collapsedWidth={80}
+        >
+          {menuContent}
+        </Sider>
+      )}
       <AntLayout>
-        <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 500 }}>
-            {t('menu.students').includes('学生') ? '北辰幼儿园管理系统' : 'Beichen Kindergarten Management System'}
-          </div>
+        <Header
+          style={{
+            background: '#fff',
+            padding: '0 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 1px 4px rgba(0,21,41,.08)',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Button
+              type="text"
+              icon={collapsed || drawerVisible ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={toggleCollapsed}
+              style={{ fontSize: 18 }}
+            />
+            <div style={{ fontSize: isMobile ? 14 : 18, fontWeight: 500 }}>
+              {isMobile
+                ? (t('menu.students').includes('学生') ? '北辰' : 'Beichen')
+                : (t('menu.students').includes('学生') ? '北辰幼儿园管理系统' : 'Beichen Kindergarten Management System')}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16 }}>
             <LanguageSwitcher />
-            <span>{user?.name}</span>
-            <Button icon={<LogoutOutlined />} onClick={handleLogout}>
-              退出登录
+            {!isMobile && <span>{user?.name}</span>}
+            <Button
+              icon={<LogoutOutlined />}
+              onClick={handleLogout}
+              size={isMobile ? 'small' : 'middle'}
+            >
+              {!isMobile && '退出登录'}
             </Button>
           </div>
         </Header>
-        <Content style={{ margin: 24, background: '#fff', padding: 24, minHeight: 280 }}>
+        <Content
+          style={{
+            margin: isMobile ? 8 : 24,
+            background: '#fff',
+            padding: isMobile ? 12 : 24,
+            minHeight: 280,
+            borderRadius: 8,
+          }}
+        >
           {children}
         </Content>
       </AntLayout>
