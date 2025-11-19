@@ -11,6 +11,12 @@ export default defineConfig({
   },
   server: {
     port: 8892,
+    host: true, // 接受所有主机名
+    strictPort: false,
+    hmr: {
+      clientPort: 8892,
+      host: 'localhost', // HMR 使用 localhost
+    },
     proxy: {
       '/api': {
         // 使用Docker服务名，在容器内运行时指向backend容器
@@ -18,5 +24,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  preview: {
+    host: true,
+    port: 8892,
   },
 });
