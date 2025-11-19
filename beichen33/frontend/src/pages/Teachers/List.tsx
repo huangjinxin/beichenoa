@@ -148,6 +148,9 @@ export default function TeacherList() {
       birthday: record.birthday ? dayjs(record.birthday) : null,
       hireDate: record.hireDate ? dayjs(record.hireDate) : null,
       resignationDate: record.resignationDate ? dayjs(record.resignationDate) : null,
+      workplace: record.workplace || '北辰幼儿园',
+      bankAccount: record.bankAccount,
+      bankName: record.bankName,
     });
     if (record.birthday) {
       setAge(calculateAge(record.birthday));
@@ -158,6 +161,7 @@ export default function TeacherList() {
   const handleAddNew = () => {
     setEditingId(null);
     form.resetFields();
+    form.setFieldsValue({ workplace: '北辰幼儿园' });
     setAge(null);
     setIsModalOpen(true);
   };
@@ -356,6 +360,15 @@ export default function TeacherList() {
               <Descriptions.Item label="离职日期">
                 {viewingRecord.resignationDate ? dayjs(viewingRecord.resignationDate).format('YYYY-MM-DD') : '-'}
               </Descriptions.Item>
+              <Descriptions.Item label="工作单位" span={2}>
+                {viewingRecord.workplace || '北辰幼儿园'}
+              </Descriptions.Item>
+              <Descriptions.Item label="银行卡号">
+                {viewingRecord.bankAccount || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="开户行">
+                {viewingRecord.bankName || '-'}
+              </Descriptions.Item>
             </Descriptions>
           )}
 
@@ -454,6 +467,15 @@ export default function TeacherList() {
           </Form.Item>
           <Form.Item name="resignationDate" label="离职日期">
             <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="workplace" label="工作单位" initialValue="北辰幼儿园">
+            <Input placeholder="默认：北辰幼儿园" />
+          </Form.Item>
+          <Form.Item name="bankAccount" label="银行卡号">
+            <Input placeholder="请输入银行卡号" />
+          </Form.Item>
+          <Form.Item name="bankName" label="开户行详细信息">
+            <Input placeholder="请输入开户行名称及支行信息" />
           </Form.Item>
           {!editingId && (
             <div style={{ marginBottom: 16, color: '#666', fontSize: 12 }}>

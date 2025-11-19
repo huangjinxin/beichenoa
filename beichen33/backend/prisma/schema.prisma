@@ -118,6 +118,11 @@ model User {
   hireDate  DateTime?
   resignationDate DateTime?
 
+  // 银行信息
+  bankAccount String?   // 银行卡号
+  bankName    String?   // 开户行详细信息
+  workplace   String?   @default("北辰幼儿园") // 工作单位
+
   campusId  String
   campus    Campus    @relation("CampusUsers", fields: [campusId], references: [id])
 

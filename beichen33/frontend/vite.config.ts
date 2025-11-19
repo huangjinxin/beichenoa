@@ -14,8 +14,10 @@ export default defineConfig({
     host: true, // 接受所有主机名
     strictPort: false,
     hmr: {
+      protocol: 'ws',
+      host: process.env.VITE_HMR_HOST || 'localhost',
+      port: 8892,
       clientPort: 8892,
-      host: 'localhost', // HMR 使用 localhost
     },
     proxy: {
       '/api': {

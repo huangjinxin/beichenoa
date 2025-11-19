@@ -48,6 +48,7 @@ services:
       - "8892:8892"
     environment:
       - DANGEROUSLY_DISABLE_HOST_CHECK=true
+      - VITE_HMR_HOST=huang.706tech.cn
     volumes:
       - ./frontend:/app
       - /app/node_modules
