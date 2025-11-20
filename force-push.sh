@@ -24,27 +24,24 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo -e "${BLUE}📍 当前分支：${NC}${GREEN}$CURRENT_BRANCH${NC}"
 echo ""
 
-# 步骤 1: 显示修改的文件
+# 步骤 1: 显示当前状态
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}📋 步骤 1/4: 检查修改的文件${NC}"
+echo -e "${YELLOW}📋 步骤 1/4: 检查当前状态${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# 检查是否有修改
-if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-    echo -e "${YELLOW}⚠️  没有检测到任何修改！${NC}"
-    echo -e "${YELLOW}   工作区是干净的，无需推送。${NC}"
-    exit 0
-fi
-
-# 显示修改的文件列表
-echo -e "${GREEN}📝 修改的文件：${NC}"
+# 显示当前状态（无论是否有修改）
+echo -e "${GREEN}📝 当前文件状态：${NC}"
 git status --short
-echo ""
 
 # 显示详细统计
 MODIFIED_COUNT=$(git status --short | wc -l | xargs)
-echo -e "${BLUE}📊 共有 ${MODIFIED_COUNT} 个文件被修改${NC}"
+if [ "$MODIFIED_COUNT" -gt 0 ]; then
+    echo -e "${BLUE}📊 检测到 ${MODIFIED_COUNT} 个文件变化${NC}"
+else
+    echo -e "${BLUE}📊 工作区当前无未提交的修改${NC}"
+    echo -e "${BLUE}   (将创建空提交以强制更新远程仓库)${NC}"
+fi
 echo ""
 
 # 步骤 2: 询问用户确认
@@ -52,14 +49,15 @@ echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}⚠️  步骤 2/4: 确认操作${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "${RED}⚠️  警告：此操作将执行强制推送 (--force)！${NC}"
-echo -e "${RED}   这将覆盖远程仓库的历史记录！${NC}"
+echo -e "${RED}⚠️  警告：此操作将无条件执行强制推送 (--force)！${NC}"
+echo -e "${RED}   这将覆盖远程仓库的所有内容和历史记录！${NC}"
+echo -e "${RED}   即使本地无修改，也会创建空提交并强制推送！${NC}"
 echo -e "${RED}   请确保您了解此操作的风险！${NC}"
 echo ""
 echo -e "${YELLOW}📦 即将执行的操作：${NC}"
-echo -e "   1. ${BLUE}git add .${NC}                    - 暂存所有修改"
-echo -e "   2. ${BLUE}git commit -m \"...\"${NC}         - 提交修改"
-echo -e "   3. ${BLUE}git push origin $CURRENT_BRANCH --force${NC} - 强制推送"
+echo -e "   1. ${BLUE}git add .${NC}                    - 暂存所有文件"
+echo -e "   2. ${BLUE}git commit --allow-empty${NC}    - 创建提交（允许空提交）"
+echo -e "   3. ${BLUE}git push origin $CURRENT_BRANCH --force${NC} - 强制推送覆盖远程"
 echo ""
 
 # 等待用户确认
@@ -90,20 +88,14 @@ echo ""
 
 # 3.2 Git Commit
 COMMIT_MESSAGE="update: 强制同步 $(date +%Y-%m-%d_%H:%M:%S)"
-echo -e "${BLUE}[2/3]${NC} 正在提交修改... ${BLUE}(git commit)${NC}"
+echo -e "${BLUE}[2/3]${NC} 正在提交修改... ${BLUE}(git commit --allow-empty)${NC}"
 echo -e "${BLUE}      提交信息: ${NC}${COMMIT_MESSAGE}"
 
-if git commit -m "$COMMIT_MESSAGE"; then
-    echo -e "${GREEN}✅ 提交成功${NC}"
+if git commit --allow-empty -m "$COMMIT_MESSAGE"; then
+    echo -e "${GREEN}✅ 提交成功（允许空提交）${NC}"
 else
-    # 检查是否是因为没有修改
-    if [ $? -eq 1 ]; then
-        echo -e "${YELLOW}⚠️  没有需要提交的修改（可能所有修改已被忽略）${NC}"
-        exit 0
-    else
-        echo -e "${RED}❌ 提交失败${NC}"
-        exit 1
-    fi
+    echo -e "${RED}❌ 提交失败${NC}"
+    exit 1
 fi
 echo ""
 
@@ -157,6 +149,8 @@ echo ""
 
 # 提示信息
 echo -e "${BLUE}💡 提示：${NC}"
-echo -e "   - 远程仓库已被强制更新"
-echo -e "   - 如果团队成员有本地副本，需要执行 ${YELLOW}git pull --rebase${NC} 或 ${YELLOW}git fetch && git reset --hard origin/$CURRENT_BRANCH${NC}"
+echo -e "   - 远程仓库已被本地仓库完全覆盖"
+echo -e "   - 所有本地文件（包括未跟踪的）都已强制推送"
+echo -e "   - 如果团队成员有本地副本，需要执行 ${YELLOW}git fetch && git reset --hard origin/$CURRENT_BRANCH${NC}"
+echo -e "   - ${RED}警告：团队成员的本地修改将会丢失，请提前备份！${NC}"
 echo ""
