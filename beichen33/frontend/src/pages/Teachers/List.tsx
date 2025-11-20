@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Table, Button, Space, Modal, Form, Input, message, Select, DatePicker, Descriptions } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, PrinterOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, Input, message, Select, DatePicker, Descriptions, Card, Tabs, Tag, Radio } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, PrinterOutlined, BankOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useReactToPrint } from 'react-to-print';
@@ -41,6 +41,8 @@ export default function TeacherList() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingRecord, setViewingRecord] = useState<any>(null);
   const [searchText, setSearchText] = useState('');
+  const [searchMode, setSearchMode] = useState<'global' | 'campus'>('global');
+  const [selectedCampus, setSelectedCampus] = useState<string>('all');
   const [age, setAge] = useState<number | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
@@ -76,13 +78,22 @@ export default function TeacherList() {
     }
   }, [form.getFieldValue('birthday')]);
 
+  // 先按分校筛选，再按搜索文本筛选
   const filteredTeachers = teachersData?.data?.filter((teacher: any) => {
+    // 分校筛选（仅在搜索模式为campus时生效，或选项卡切换时）
+    if (selectedCampus !== 'all') {
+      const teacherCampusId = teacher.campusId || teacher.campus?.id;
+      if (teacherCampusId !== selectedCampus) return false;
+    }
+
+    // 搜索文本筛选
     if (!searchText) return true;
     const searchLower = searchText.toLowerCase();
     return (
       teacher.name?.toLowerCase().includes(searchLower) ||
       teacher.email?.toLowerCase().includes(searchLower) ||
-      teacher.phone?.toLowerCase().includes(searchLower)
+      teacher.phone?.toLowerCase().includes(searchLower) ||
+      teacher.idCard?.toLowerCase().includes(searchLower)
     );
   }) || [];
 
@@ -161,7 +172,10 @@ export default function TeacherList() {
   const handleAddNew = () => {
     setEditingId(null);
     form.resetFields();
-    form.setFieldsValue({ workplace: '北辰幼儿园' });
+    form.setFieldsValue({
+      workplace: '北辰幼儿园',
+      campusId: selectedCampus !== 'all' ? selectedCampus : undefined,
+    });
     setAge(null);
     setIsModalOpen(true);
   };
@@ -214,7 +228,7 @@ export default function TeacherList() {
           queryClient.invalidateQueries({ queryKey: ['teachers'] });
           message.success('批量删除成功');
           setSelectedRowKeys([]);
-        } catch (error) {
+        } catch {
           message.error('批量删除失败');
         }
       },
@@ -225,6 +239,33 @@ export default function TeacherList() {
     selectedRowKeys,
     onChange: (keys: any) => setSelectedRowKeys(keys),
   };
+
+  // 构建选项卡数据
+  const tabItems = [
+    {
+      key: 'all',
+      label: (
+        <span>
+          <BankOutlined /> 全部
+          <Tag color="blue" style={{ marginLeft: 8 }}>{teachersData?.data?.length || 0}</Tag>
+        </span>
+      ),
+    },
+    ...(campusData?.map((campus: any) => {
+      const campusTeachers = teachersData?.data?.filter((t: any) =>
+        t.campusId === campus.id || t.campus?.id === campus.id
+      ) || [];
+      return {
+        key: campus.id,
+        label: (
+          <span>
+            {campus.name}
+            <Tag color="green" style={{ marginLeft: 8 }}>{campusTeachers.length}</Tag>
+          </span>
+        ),
+      };
+    }) || []),
+  ];
 
   const columns = [
     { title: '姓名', dataIndex: 'name', key: 'name' },
@@ -246,12 +287,13 @@ export default function TeacherList() {
       key: 'employmentStatus',
       render: (status: string) => {
         const statusMap: any = {
-          ACTIVE: '在职',
-          RESIGNED: '离职',
-          PROBATION: '试用期',
-          SUSPENDED: '停职'
+          ACTIVE: { text: '在职', color: 'green' },
+          RESIGNED: { text: '离职', color: 'red' },
+          PROBATION: { text: '试用期', color: 'orange' },
+          SUSPENDED: { text: '停职', color: 'gray' }
         };
-        return statusMap[status] || '-';
+        const item = statusMap[status] || { text: '-', color: 'default' };
+        return <Tag color={item.color}>{item.text}</Tag>;
       }
     },
     { title: '身份证号', dataIndex: 'idCard', key: 'idCard' },
@@ -261,7 +303,6 @@ export default function TeacherList() {
       key: 'age',
       render: (_: any, record: any) => record.birthday ? calculateAge(record.birthday) : '-'
     },
-    { title: '邮箱', dataIndex: 'email', key: 'email' },
     { title: '电话', dataIndex: 'phone', key: 'phone' },
     {
       title: '任职日期',
@@ -287,13 +328,6 @@ export default function TeacherList() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <h1>教师管理</h1>
         <Space>
-          <Input
-            placeholder="搜索教师姓名、邮箱或电话"
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{ width: 300 }}
-          />
           {selectedRowKeys.length > 0 && (
             <Button danger onClick={handleBatchDelete}>
               批量删除 ({selectedRowKeys.length})
@@ -305,13 +339,44 @@ export default function TeacherList() {
         </Space>
       </div>
 
-      <Table
-        dataSource={filteredTeachers}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        rowSelection={rowSelection}
-      />
+      <Card>
+        <Tabs
+          activeKey={selectedCampus}
+          onChange={(key) => {
+            setSelectedCampus(key);
+            setSelectedRowKeys([]);
+          }}
+          items={tabItems}
+        />
+
+        {/* 搜索区域 */}
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Radio.Group value={searchMode} onChange={(e) => setSearchMode(e.target.value)} size="small">
+            <Radio.Button value="global">全局搜索</Radio.Button>
+            <Radio.Button value="campus">当前分校</Radio.Button>
+          </Radio.Group>
+          <Input
+            placeholder={searchMode === 'global' ? "搜索姓名、电话、身份证号" : `在${selectedCampus === 'all' ? '全部' : campusData?.find((c: any) => c.id === selectedCampus)?.name || ''}中搜索`}
+            prefix={<SearchOutlined />}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: 350 }}
+            allowClear
+          />
+          <span style={{ color: '#666', fontSize: 12 }}>
+            共 {filteredTeachers.length} 人
+          </span>
+        </div>
+
+        <Table
+          dataSource={filteredTeachers}
+          columns={columns}
+          rowKey="id"
+          loading={isLoading}
+          rowSelection={rowSelection}
+          scroll={{ x: 1200 }}
+        />
+      </Card>
 
       <Modal
         title="教师详情"
@@ -391,6 +456,7 @@ export default function TeacherList() {
         cancelText={t('common.cancel')}
         onOk={() => form.submit()}
         width={600}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
       >
         <Form form={form} onFinish={handleSubmit} layout="vertical">
           <Form.Item name="name" label="教师姓名" rules={[{ required: true }]}>

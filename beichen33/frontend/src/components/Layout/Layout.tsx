@@ -56,9 +56,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       children: [
         { key: '/students', icon: <UserOutlined />, label: '学生管理' },
         { key: '/teachers', icon: <TeamOutlined />, label: '教师管理' },
-        { key: '/classes', icon: <TeamOutlined />, label: '班级管理' },
+        { key: '/classes', icon: <HomeOutlined />, label: '班级与分校' },
         { key: '/birthday', icon: <GiftOutlined />, label: '生日管理' },
-        { key: '/campus', icon: <HomeOutlined />, label: '分校管理' },
         { key: '/positions', icon: <TeamOutlined />, label: '职位管理' },
       ],
     },

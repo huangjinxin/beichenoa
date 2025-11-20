@@ -210,6 +210,8 @@ export default function PositionsList() {
         }}
         okText="确定"
         cancelText="取消"
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        okButtonProps={{ disabled: createMutation.isPending || updateMutation.isPending }}
       >
         <Form form={form} onFinish={handleSubmit} layout="vertical">
           <Form.Item name="name" label="职位名称" rules={[{ required: true, message: '请输入职位名称' }]}>

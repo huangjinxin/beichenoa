@@ -91,6 +91,20 @@ export class PositionsService {
 
   async create(dto: CreatePositionDto) {
     try {
+      // 检查是否存在同名+同类型+同级别的职位（防止重复添加）
+      const existing = await this.prisma.position.findFirst({
+        where: {
+          name: dto.name,
+          type: dto.type,
+          level: Number(dto.level),
+          deletedAt: null,
+        },
+      });
+
+      if (existing) {
+        throw new BadRequestException(`职位"${dto.name}"已存在，请勿重复添加`);
+      }
+
       const data = {
         name: dto.name,
         type: dto.type,
@@ -107,6 +121,9 @@ export class PositionsService {
         },
       });
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new BadRequestException(`Failed to create position: ${error.message}`);
     }
   }

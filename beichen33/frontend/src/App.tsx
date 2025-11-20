@@ -5,10 +5,9 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import StudentList from './pages/Students/List';
 import StudentDetail from './pages/Students/Detail';
 import GrowthRecords from './pages/Students/GrowthRecords';
-import ClassList from './pages/Classes/List';
+import CampusClasses from './pages/Classes/CampusClasses';
 import ClassDetail from './pages/Classes/Detail';
 import TeacherList from './pages/Teachers/List';
-import CampusList from './pages/Campus/List';
 import PositionsList from './pages/Positions/List';
 import BirthdayList from './pages/Birthday/List';
 import Ingredients from './pages/Canteen/Ingredients';
@@ -50,10 +49,10 @@ function App() {
       <Route path="/students" element={<PrivateRoute><StudentList /></PrivateRoute>} />
       <Route path="/students/:id" element={<PrivateRoute><StudentDetail /></PrivateRoute>} />
       <Route path="/students/:id/records" element={<PrivateRoute><GrowthRecords /></PrivateRoute>} />
-      <Route path="/classes" element={<PrivateRoute><ClassList /></PrivateRoute>} />
+      <Route path="/classes" element={<PrivateRoute><CampusClasses /></PrivateRoute>} />
       <Route path="/classes/:id" element={<PrivateRoute><ClassDetail /></PrivateRoute>} />
       <Route path="/teachers" element={<PrivateRoute><TeacherList /></PrivateRoute>} />
-      <Route path="/campus" element={<PrivateRoute><CampusList /></PrivateRoute>} />
+      <Route path="/campus" element={<Navigate to="/classes" />} />
       <Route path="/positions" element={<PrivateRoute><PositionsList /></PrivateRoute>} />
       <Route path="/birthday" element={<PrivateRoute><BirthdayList /></PrivateRoute>} />
       <Route path="/canteen/ingredients" element={<PrivateRoute><Ingredients /></PrivateRoute>} />

@@ -1,5 +1,9 @@
 -- CreateEnum
-CREATE TYPE "PurchasePlanStatus" AS ENUM ('DRAFT', 'CONFIRMED', 'ORDERED', 'COMPLETED');
+DO $$ BEGIN
+    CREATE TYPE "PurchasePlanStatus" AS ENUM ('DRAFT', 'CONFIRMED', 'ORDERED', 'COMPLETED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- AlterTable - Add bank info to User
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bankAccount" TEXT;

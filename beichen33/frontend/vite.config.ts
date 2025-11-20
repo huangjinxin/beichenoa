@@ -11,11 +11,16 @@ export default defineConfig({
   },
   server: {
     port: 8892,
-    host: true, // 接受所有主机名
+    host: '0.0.0.0', // 监听所有网络接口
+    allowedHosts: ['beichen.706tech.cn', '.706tech.cn', 'localhost'], // 允许的域名
     strictPort: false,
+    watch: {
+      usePolling: false, // 禁用轮询，避免过度监听
+      ignored: ['**/node_modules/**', '**/.git/**'],
+    },
     hmr: {
-      // 让客户端使用当前访问的域名，适应不同部署环境
-      clientPort: 8892,
+      // 不指定 host，让浏览器使用当前访问的域名
+      overlay: true,
     },
     proxy: {
       '/api': {

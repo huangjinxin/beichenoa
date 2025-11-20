@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { Table, Button, Space, Modal, Form, Input, Select, DatePicker, message, Descriptions } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, PrinterOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, Input, Select, DatePicker, message, Descriptions, Card, Tabs, Tag, Radio } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, PrinterOutlined, SearchOutlined, BankOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useReactToPrint } from 'react-to-print';
@@ -34,7 +34,10 @@ export default function StudentList() {
   const [viewingStudent, setViewingStudent] = useState<any>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
-  const [selectedCampus, setSelectedCampus] = useState<string | undefined>(undefined);
+  const [selectedCampus, setSelectedCampus] = useState<string>('all');
+  const [selectedClass, setSelectedClass] = useState<string | undefined>(undefined);
+  const [searchText, setSearchText] = useState('');
+  const [searchMode, setSearchMode] = useState<'global' | 'campus' | 'class'>('global');
   const printRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -48,18 +51,45 @@ export default function StudentList() {
     queryFn: campusApi.getAll,
   });
 
-  // 根据选中的分校过滤班级
+  const { data: allClassesData } = useQuery({
+    queryKey: ['classes'],
+    queryFn: () => classApi.getAll(),
+  });
+
+  // 根据选中的分校过滤班级（用于表单）
   const { data: classesData } = useQuery({
     queryKey: ['classes', selectedCampus],
     queryFn: async () => {
       const result = await classApi.getAll();
-      // 如果选择了分校，过滤班级
-      if (selectedCampus && result) {
-        return result.filter((cls: any) => cls.campusId === selectedCampus);
+      if (selectedCampus && selectedCampus !== 'all' && result) {
+        return result.filter((cls: any) => cls.campusId === selectedCampus || cls.campus?.id === selectedCampus);
       }
       return result;
     },
   });
+
+  // 先按分校筛选，再按班级筛选，最后按搜索文本筛选
+  const filteredStudents = studentsData?.data?.filter((student: any) => {
+    // 分校筛选
+    if (selectedCampus !== 'all') {
+      const studentCampusId = student.class?.campusId || student.class?.campus?.id;
+      if (studentCampusId !== selectedCampus) return false;
+    }
+
+    // 班级筛选（如果选择了班级）
+    if (selectedClass) {
+      if (student.class?.id !== selectedClass) return false;
+    }
+
+    // 搜索文本筛选
+    if (!searchText) return true;
+    const searchLower = searchText.toLowerCase();
+    return (
+      student.name?.toLowerCase().includes(searchLower) ||
+      student.idCard?.toLowerCase().includes(searchLower) ||
+      student.class?.name?.toLowerCase().includes(searchLower)
+    );
+  }) || [];
 
   const createMutation = useMutation({
     mutationFn: studentApi.create,
@@ -117,22 +147,20 @@ export default function StudentList() {
 
   const handleEdit = (record: any) => {
     setEditingId(record.id);
-    // 设置选中的分校，以便过滤班级列表
-    setSelectedCampus(record.class?.campusId || record.campus?.id);
+    const campusId = record.class?.campusId || record.class?.campus?.id;
+    setSelectedCampus(campusId || 'all');
     form.setFieldsValue({
       ...record,
       classId: record.class?.id,
-      campusId: record.class?.campusId || record.campus?.id,
+      campusId: campusId,
       birthday: dayjs(record.birthday),
       enrollDate: dayjs(record.enrollDate)
     });
     setIsModalOpen(true);
   };
 
-  // 处理分校选择变化
-  const handleCampusChange = (campusId: string | undefined) => {
-    setSelectedCampus(campusId);
-    // 清空班级选择
+  const handleCampusChangeInForm = (campusId: string | undefined) => {
+    // 用于表单中的分校选择
     form.setFieldsValue({ classId: undefined });
   };
 
@@ -157,22 +185,22 @@ export default function StudentList() {
 
   const handleBatchDelete = () => {
     if (selectedRowKeys.length === 0) {
-      message.warning('Please select students to delete');
+      message.warning('请选择要删除的学生');
       return;
     }
     Modal.confirm({
-      title: `Delete ${selectedRowKeys.length} students?`,
-      content: 'This action cannot be undone',
+      title: `确定删除 ${selectedRowKeys.length} 名学生？`,
+      content: '此操作无法撤销',
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       onOk: async () => {
         try {
           await Promise.all(selectedRowKeys.map(id => studentApi.delete(id)));
           queryClient.invalidateQueries({ queryKey: ['students'] });
-          message.success('Batch delete successful');
+          message.success('批量删除成功');
           setSelectedRowKeys([]);
-        } catch (error) {
-          message.error('Batch delete failed');
+        } catch {
+          message.error('批量删除失败');
         }
       },
     });
@@ -183,12 +211,51 @@ export default function StudentList() {
     onChange: (keys: any) => setSelectedRowKeys(keys),
   };
 
-  const columns = [
-    { title: t('students.studentName'), dataIndex: 'name', key: 'name' },
-    { title: 'ID Card', dataIndex: 'idCard', key: 'idCard' },
-    { title: t('students.className'), dataIndex: ['class', 'name'], key: 'class' },
+  // 构建选项卡数据
+  const tabItems = [
     {
-      title: 'Age',
+      key: 'all',
+      label: (
+        <span>
+          <BankOutlined /> 全部
+          <Tag color="blue" style={{ marginLeft: 8 }}>{studentsData?.data?.length || 0}</Tag>
+        </span>
+      ),
+    },
+    ...(campusData?.map((campus: any) => {
+      const campusStudents = studentsData?.data?.filter((s: any) => {
+        const studentCampusId = s.class?.campusId || s.class?.campus?.id;
+        return studentCampusId === campus.id;
+      }) || [];
+      return {
+        key: campus.id,
+        label: (
+          <span>
+            {campus.name}
+            <Tag color="green" style={{ marginLeft: 8 }}>{campusStudents.length}</Tag>
+          </span>
+        ),
+      };
+    }) || []),
+  ];
+
+  // 当前分校下的班级列表（用于筛选）
+  const currentCampusClasses = allClassesData?.filter((cls: any) => {
+    if (selectedCampus === 'all') return true;
+    return cls.campusId === selectedCampus || cls.campus?.id === selectedCampus;
+  }) || [];
+
+  const columns = [
+    { title: '姓名', dataIndex: 'name', key: 'name' },
+    { title: '身份证号', dataIndex: 'idCard', key: 'idCard' },
+    {
+      title: '性别',
+      dataIndex: 'gender',
+      key: 'gender',
+      render: (gender: string) => gender === 'Male' ? '男' : '女'
+    },
+    {
+      title: '年龄',
       key: 'age',
       render: (_: any, record: any) => {
         const age = dayjs().diff(dayjs(record.birthday), 'year');
@@ -196,7 +263,23 @@ export default function StudentList() {
       },
     },
     {
-      title: t('common.actions'),
+      title: '班级',
+      dataIndex: ['class', 'name'],
+      key: 'class'
+    },
+    {
+      title: '分校',
+      key: 'campus',
+      render: (_: any, record: any) => record.class?.campus?.name || '-'
+    },
+    {
+      title: '入园日期',
+      dataIndex: 'enrollDate',
+      key: 'enrollDate',
+      render: (date: string) => date ? dayjs(date).format('YYYY-MM-DD') : '-'
+    },
+    {
+      title: '操作',
       key: 'actions',
       render: (_: any, record: any) => (
         <Space>
@@ -221,25 +304,86 @@ export default function StudentList() {
         <Space>
           {selectedRowKeys.length > 0 && (
             <Button danger onClick={handleBatchDelete}>
-              Batch Delete ({selectedRowKeys.length})
+              批量删除 ({selectedRowKeys.length})
             </Button>
           )}
           <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+            setEditingId(null);
+            form.resetFields();
+            if (selectedCampus !== 'all') {
+              form.setFieldsValue({ campusId: selectedCampus });
+            }
             setIsModalOpen(true);
-            setSelectedCampus(undefined);
           }}>
             {t('students.add')}
           </Button>
         </Space>
       </div>
 
-      <Table
-        dataSource={studentsData?.data || []}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        rowSelection={rowSelection}
-      />
+      <Card>
+        <Tabs
+          activeKey={selectedCampus}
+          onChange={(key) => {
+            setSelectedCampus(key);
+            setSelectedClass(undefined);
+            setSelectedRowKeys([]);
+          }}
+          items={tabItems}
+        />
+
+        {/* 搜索区域 */}
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <Radio.Group value={searchMode} onChange={(e) => {
+            setSearchMode(e.target.value);
+            if (e.target.value !== 'class') {
+              setSelectedClass(undefined);
+            }
+          }} size="small">
+            <Radio.Button value="global">全局搜索</Radio.Button>
+            <Radio.Button value="campus">当前分校</Radio.Button>
+            <Radio.Button value="class">按班级</Radio.Button>
+          </Radio.Group>
+
+          {searchMode === 'class' && (
+            <Select
+              placeholder="选择班级"
+              style={{ width: 150 }}
+              allowClear
+              value={selectedClass}
+              onChange={setSelectedClass}
+              options={currentCampusClasses.map((cls: any) => ({
+                label: cls.name,
+                value: cls.id,
+              }))}
+            />
+          )}
+
+          <Input
+            placeholder={
+              searchMode === 'global' ? "搜索姓名、身份证号、班级" :
+              searchMode === 'campus' ? `在${selectedCampus === 'all' ? '全部' : campusData?.find((c: any) => c.id === selectedCampus)?.name || ''}中搜索` :
+              "搜索姓名、身份证号"
+            }
+            prefix={<SearchOutlined />}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: 300 }}
+            allowClear
+          />
+
+          <span style={{ color: '#666', fontSize: 12 }}>
+            共 {filteredStudents.length} 人
+          </span>
+        </div>
+
+        <Table
+          dataSource={filteredStudents}
+          columns={columns}
+          rowKey="id"
+          loading={isLoading}
+          rowSelection={rowSelection}
+        />
+      </Card>
 
       <Modal
         title={editingId ? t('students.edit') : t('students.add')}
@@ -248,11 +392,11 @@ export default function StudentList() {
           setIsModalOpen(false);
           form.resetFields();
           setEditingId(null);
-          setSelectedCampus(undefined);
         }}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
         onOk={() => form.submit()}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
       >
         <Form form={form} onFinish={handleSubmit} layout="vertical">
           <Form.Item name="name" label={t('students.studentName')} rules={[{ required: true }]}>
@@ -260,13 +404,13 @@ export default function StudentList() {
           </Form.Item>
           <Form.Item
             name="idCard"
-            label="ID Card"
+            label="身份证号"
             rules={[
-              { required: true, message: 'Please input ID card number' },
-              { len: 18, message: 'ID card must be 18 digits' }
+              { required: true, message: '请输入身份证号' },
+              { len: 18, message: '身份证号必须为18位' }
             ]}
           >
-            <Input onChange={handleIdCardChange} maxLength={18} />
+            <Input onChange={handleIdCardChange} maxLength={18} placeholder="输入身份证号自动填充生日和性别" />
           </Form.Item>
           <Form.Item name="gender" label={t('students.gender')} rules={[{ required: true }]}>
             <Select disabled>
@@ -283,7 +427,7 @@ export default function StudentList() {
           <Form.Item name="campusId" label="所属分校" rules={[{ required: true, message: '请先选择分校' }]}>
             <Select
               placeholder="请先选择分校"
-              onChange={handleCampusChange}
+              onChange={handleCampusChangeInForm}
               allowClear
             >
               {campusData?.map((campus: any) => (
@@ -294,11 +438,10 @@ export default function StudentList() {
           <Form.Item
             name="classId"
             label={t('students.className')}
-            rules={[{ required: true, message: '请先选择分校，再选择班级' }]}
+            rules={[{ required: true, message: '请选择班级' }]}
           >
             <Select
-              placeholder={selectedCampus ? "请选择班级" : "请先选择分校"}
-              disabled={!selectedCampus}
+              placeholder="请选择班级"
             >
               {classesData?.map((c: any) => (
                 <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
@@ -346,8 +489,11 @@ export default function StudentList() {
             <Descriptions.Item label="入园日期">
               {viewingStudent?.enrollDate && dayjs(viewingStudent.enrollDate).format('YYYY-MM-DD')}
             </Descriptions.Item>
-            <Descriptions.Item label="所在班级" span={2}>
+            <Descriptions.Item label="所在班级">
               {viewingStudent?.class?.name || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="所在分校">
+              {viewingStudent?.class?.campus?.name || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="家庭住址" span={2}>
               {viewingStudent?.address || '-'}
