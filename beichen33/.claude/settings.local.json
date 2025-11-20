@@ -51,7 +51,8 @@
       "Bash(docker restart:*)",
       "Bash(do echo -n '$endpoint: ' curl -s http://localhost:8891/api/$endpoint -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYTc2MzMwMC03YzEzLTQyMzItYjgyYi0zZmNiYTQ1NGQ5MWUiLCJlbWFpbCI6ImFkbWluQGJlaWNoZW4uY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzYzMjQ3ODk0LCJleHAiOjE3NjM4NTI2OTR9.I6SMqhPS4MlpN2VkGb4nGS3LUu7TDu3sOBqsSiHP8cw')",
       "Bash(timeout 10 npm run dev:*)",
-      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYTc2MzMwMC03YzEzLTQyMzItYjgyYi0zZmNiYTQ1NGQ5MWUiLCJlbWFpbCI6ImFkbWluQGJlaWNoZW4uY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzYzMzUyNTEyLCJleHAiOjE3NjM5NTczMTJ9.ptcJt_umMh3LsaSvu1PsCQawxT18Is7E1_56UJb-efQ\" NO_PROXY=\"localhost\" curl -s http://localhost:8891/api/classes -H \"Authorization: Bearer $TOKEN\")"
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxYTc2MzMwMC03YzEzLTQyMzItYjgyYi0zZmNiYTQ1NGQ5MWUiLCJlbWFpbCI6ImFkbWluQGJlaWNoZW4uY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzYzMzUyNTEyLCJleHAiOjE3NjM5NTczMTJ9.ptcJt_umMh3LsaSvu1PsCQawxT18Is7E1_56UJb-efQ\" NO_PROXY=\"localhost\" curl -s http://localhost:8891/api/classes -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
