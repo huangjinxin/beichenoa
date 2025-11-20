@@ -24,6 +24,17 @@ api.interceptors.response.use(
   }
 );
 
+// 公共API（无需认证）
+const publicApi = axios.create({
+  baseURL: '/api',
+  timeout: 30000,
+});
+
+publicApi.interceptors.response.use(
+  (response) => response.data,
+  (error) => Promise.reject(error)
+);
+
 export const authApi = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   register: (data: any) => api.post('/auth/register', data),
@@ -101,6 +112,10 @@ export const formApi = {
   getPresetTemplates: () => api.get('/forms/templates/presets'),
   createFromPreset: (data: { presetId: string; title?: string }) => api.post('/forms/templates/from-preset', data),
   initPresetTemplates: () => api.post('/forms/templates/init-presets'),
+  // 表单分享
+  generateShareLink: (templateId: string) => api.post(`/forms/templates/${templateId}/share`),
+  getTemplateByShareToken: (token: string) => publicApi.get(`/forms/share/${token}`),
+  submitByShareToken: (token: string, data: any) => publicApi.post(`/forms/share/${token}/submit`, data),
   // 表单提交
   getSubmissions: (params?: any) => api.get('/forms/submissions', { params }),
   getSubmission: (id: string) => api.get(`/forms/submissions/${id}`),
@@ -114,6 +129,71 @@ export const formApi = {
   getMyApprovedList: (params?: any) => api.get('/forms/approvals/approved', { params }),
   // 实时计算
   calculateRow: (data: { row: any; columns: any[] }) => api.post('/forms/calculate/row', data),
+
+  // 数据联动 API
+  searchEntities: (params: { entityType: string; keyword?: string; filters?: any }) =>
+    api.get('/forms/entities/search', { params: { ...params, filters: params.filters ? JSON.stringify(params.filters) : undefined } }),
+  searchStudents: (params?: { keyword?: string; classId?: string }) =>
+    api.get('/forms/entities/students', { params }),
+  searchTeachers: (params?: { keyword?: string }) =>
+    api.get('/forms/entities/teachers', { params }),
+  searchClasses: (params?: { keyword?: string }) =>
+    api.get('/forms/entities/classes', { params }),
+  validateUnique: (data: { entityType: string; field: string; value: string; excludeId?: string }) =>
+    api.post('/forms/validate/unique', data),
+  validateBatch: (data: { templateId: string; data: any[] }) =>
+    api.post('/forms/validate/batch', data),
+  // 实体绑定配置
+  getEntityBindings: (templateId: string) => api.get(`/forms/templates/${templateId}/entity-bindings`),
+  createEntityBinding: (templateId: string, data: any) => api.post(`/forms/templates/${templateId}/entity-bindings`, data),
+  updateEntityBinding: (id: string, data: any) => api.put(`/forms/entity-bindings/${id}`, data),
+  deleteEntityBinding: (id: string) => api.delete(`/forms/entity-bindings/${id}`),
+  // 数据同步
+  syncEntities: (submissionId: string) => api.post(`/forms/submissions/${submissionId}/sync-entities`),
+  processFieldModes: (submissionId: string) => api.post(`/forms/submissions/${submissionId}/process-fields`),
+  getEntityLinks: (submissionId: string) => api.get(`/forms/submissions/${submissionId}/entity-links`),
+};
+
+// 审批流程设计器 API
+export const approvalApi = {
+  // 流程管理
+  getFlows: (params?: any) => api.get('/approvals/flows', { params }),
+  getFlow: (id: string) => api.get(`/approvals/flows/${id}`),
+  getFlowsByTemplate: (templateId: string) => api.get(`/approvals/flows/template/${templateId}`),
+  createFlow: (data: any) => api.post('/approvals/flows', data),
+  updateFlow: (id: string, data: any) => api.put(`/approvals/flows/${id}`, data),
+  deleteFlow: (id: string) => api.delete(`/approvals/flows/${id}`),
+
+  // 节点管理
+  addNode: (flowId: string, data: any) => api.post(`/approvals/flows/${flowId}/nodes`, data),
+  updateNode: (nodeId: string, data: any) => api.put(`/approvals/nodes/${nodeId}`, data),
+  deleteNode: (nodeId: string) => api.delete(`/approvals/nodes/${nodeId}`),
+  reorderNodes: (flowId: string, nodeIds: string[]) =>
+    api.put(`/approvals/flows/${flowId}/nodes/reorder`, { nodeIds }),
+
+  // 流程绑定
+  bindFlowToTemplate: (flowId: string, templateId: string) =>
+    api.post(`/approvals/flows/${flowId}/bind/${templateId}`),
+  unbindFlowFromTemplate: (flowId: string) =>
+    api.delete(`/approvals/flows/${flowId}/unbind`),
+
+  // 审批人选项
+  getApproverOptions: (params?: any) => api.get('/approvals/approvers', { params }),
+  getRoleOptions: () => api.get('/approvals/roles'),
+  getPositionOptions: () => api.get('/approvals/positions'),
+  getUsersByRole: (role: string) => api.get(`/approvals/users/by-role/${role}`),
+  getUsersByPosition: (positionId: string) => api.get(`/approvals/users/by-position/${positionId}`),
+  getSuperior: (userId: string) => api.get(`/approvals/users/superior/${userId}`),
+
+  // 审批任务管理
+  getMyPendingTasks: () => api.get('/approvals/tasks/pending'),
+  getMyCompletedTasks: () => api.get('/approvals/tasks/completed'),
+  processTask: (taskId: string, data: { action: 'APPROVE' | 'REJECT' | 'RETURN'; comment?: string }) =>
+    api.post(`/approvals/tasks/${taskId}/process`, data),
+  startApprovalFlow: (submissionId: string, flowId: string) =>
+    api.post(`/approvals/submissions/${submissionId}/start`, { flowId }),
+  getApprovalHistory: (submissionId: string) =>
+    api.get(`/approvals/submissions/${submissionId}/history`),
 };
 
 export const reportApi = {

@@ -142,6 +142,8 @@ model User {
   purchasePlans   PurchasePlan[]
   dailyObservations DailyObservation[] @relation("DailyObservationTeacher")
   dutyReports       DutyReport[]       @relation("DutyReportLeader")
+  approvalTasks     ApprovalTask[]
+  transferredTasks  ApprovalTask[]     @relation("TransferredTasks")
 
   @@index([email])
   @@index([role])
@@ -153,7 +155,7 @@ model User {
 model Student {
   id          String    @id @default(uuid())
   name        String
-  idCard      String?
+  idCard      String?   @unique  // 身份证号唯一
   gender      String
   birthday    DateTime
   enrollDate  DateTime
@@ -164,6 +166,9 @@ model Student {
   // 采购计划相关字段
   ageGroup    String?   // 年龄段：2-3/3-4/4-5/5-6/6-7
   birthDate   DateTime? // 出生日期（用于自动计算年龄段）
+
+  // 主要联系人手机号（便于表单联动校验）
+  primaryPhone String?
 
   campusId    String
   campus      Campus    @relation(fields: [campusId], references: [id])
@@ -182,6 +187,8 @@ model Student {
   @@index([name])
   @@index([campusId])
   @@index([ageGroup])
+  @@index([idCard])
+  @@index([primaryPhone])
 }
 
 model Parent {
@@ -380,9 +387,6 @@ model FormTemplate {
   // 计算规则配置
   calculations Json?    // [{ field: "total", formula: "price * quantity" }, { field: "grandTotal", formula: "SUM(details.total)" }]
 
-  // 审批流程配置
-  approvalConfig Json?  // { levels: [{ name: "分管领导", field: "managerOpinion" }, ...] }
-
   // 流水号配置
   serialNumberConfig Json? // { prefix: "REPAIR", dateFormat: "YYYY", digits: 3 }
 
@@ -390,9 +394,34 @@ model FormTemplate {
   isPreset    Boolean   @default(false)
   presetType  String?   // "repair_approval", "purchase_approval" 等
 
+  // 分享token（用于匿名填写）
+  shareToken  String?   @unique
+
   isActive    Boolean   @default(true)
 
   submissions FormSubmission[]
+
+  // 实体绑定配置
+  entityBindings FormEntityBinding[]
+
+  // 关联的审批流程
+  approvalFlows ApprovalFlow[]
+
+  // ==================== 业务数据映射配置 ====================
+
+  // 主要业务类型（该表单主要操作哪种业务数据）
+  primaryBusinessType String?  // student, teacher, class, parent
+
+  // 操作类型
+  businessActionType  String?  // create, update, link
+
+  // 字段映射配置
+  // [{ formField: "studentName", businessField: "name", businessType: "student" }]
+  fieldMappings Json?
+
+  // 唯一性校验配置
+  // [{ formField: "idCard", businessField: "idCard", businessType: "student", errorMessage: "已存在" }]
+  uniqueValidations Json?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -401,6 +430,8 @@ model FormTemplate {
   @@index([title])
   @@index([isPreset])
   @@index([presetType])
+  @@index([shareToken])
+  @@index([primaryBusinessType])
 }
 
 model FormSubmission {
@@ -423,16 +454,32 @@ model FormSubmission {
   // 计算结果
   calculatedValues Json? // { grandTotal: 1500, itemCount: 5 }
 
+  // 审批流程信息
+  approvalFlowId String?
+  approvalFlow   ApprovalFlow? @relation(fields: [approvalFlowId], references: [id])
+
   // 审批状态
-  status      ApprovalStatus @default(PENDING)
+  approvalStatus ApprovalSubmissionStatus @default(DRAFT)
 
-  // 当前审批节点
-  currentApprovalStep Int @default(0) // 0 表示未开始，1 表示第一级审批，以此类推
+  // 当前审批节点序号
+  currentNodeSequence Int @default(0) // 0表示未开始审批，1开始第一级
 
-  // 当前审批人列表（JSON 数组）
-  currentApprovers Json? // ["userId1", "userId2"]
+  // 审批任务
+  approvalTasks ApprovalTask[]
 
-  approvals   Approval[]
+  // ==================== 业务数据同步相关 ====================
+
+  // 是否已同步到业务数据
+  syncedToBusinessData Boolean @default(false)
+
+  // 同步时间
+  syncedAt DateTime?
+
+  // 业务数据关联记录
+  businessDataLinks BusinessDataLink[]
+
+  // 旧的实体关联记录（保留兼容）
+  entityLinks FormEntityLink[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -440,39 +487,254 @@ model FormSubmission {
 
   @@index([templateId])
   @@index([submittedBy])
-  @@index([status])
+  @@index([approvalStatus])
+  @@index([approvalFlowId])
   @@index([serialNumber])
-  @@index([currentApprovalStep])
+  @@index([syncedToBusinessData])
 }
 
-model Approval {
+// ==================== 审批流程模型（新架构） ====================
+
+// 审批流程模板
+model ApprovalFlow {
   id          String    @id @default(uuid())
-  submissionId String
-  submission  FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  name        String    // 流程名称
+  description String?   // 流程描述
 
-  // 审批节点信息
-  step        Int       // 审批步骤（第几级审批）
-  stepName    String    // 审批节点名称（如"分管领导审批"）
+  // 关联的表单模板（可选）
+  formTemplateId String?
+  formTemplate   FormTemplate? @relation(fields: [formTemplateId], references: [id])
 
-  // 审批人信息
-  approverId  String
-  approverName String   // 审批人姓名（冗余存储，便于查询）
+  isActive    Boolean   @default(true)
 
-  // 审批状态和结果
-  status      ApprovalStatus @default(PENDING)
-  action      String?   // APPROVE（通过）、REJECT（驳回）、RETURN（退回）
-  comment     String?   // 审批意见
+  // 流程节点
+  nodes       ApprovalNode[]
 
-  // 审批时间
-  approvedAt  DateTime? // 实际审批时间
+  // 使用此流程的提交记录
+  submissions FormSubmission[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([formTemplateId])
+  @@index([isActive])
+}
+
+// 审批节点
+model ApprovalNode {
+  id          String    @id @default(uuid())
+  flowId      String
+  flow        ApprovalFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  name        String    // 节点名称
+  sequence    Int       // 节点顺序
+
+  // 审批类型
+  type        ApprovalNodeType  // SERIAL(串行) | PARALLEL(并行)
+
+  // 并行审批模式
+  parallelMode ParallelMode?    // AND(会签) | OR(或签)
+
+  // 审批人配置 [{ userId: "xxx", userName: "张三" }]
+  approvers   Json
+
+  // 审批人类型
+  approverType String   @default("user")  // user(指定用户), role(角色), position(职位), superior(上级)
+
+  // 审批权限
+  canReject   Boolean   @default(true)
+  canReturn   Boolean   @default(true)
+  canTransfer Boolean   @default(false)
+
+  // 驳回行为
+  rejectBehavior String @default("END")  // END(结束流程), RETURN_TO_START(退回发起人), RETURN_TO_PREVIOUS(退回上一节点)
+
+  // 超时设置（小时）
+  timeoutHours Int?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  @@index([flowId])
+  @@index([sequence])
+}
+
+enum ApprovalNodeType {
+  SERIAL      // 串行
+  PARALLEL    // 并行
+}
+
+enum ParallelMode {
+  AND  // 会签：全部通过
+  OR   // 或签：任意通过
+}
+
+// 审批任务
+model ApprovalTask {
+  id            String    @id @default(uuid())
+
+  // 关联的提交记录
+  submissionId  String
+  submission    FormSubmission @relation(fields: [submissionId], references: [id])
+
+  // 流程节点信息
+  flowId        String
+  nodeId        String
+  nodeName      String
+  nodeSequence  Int
+
+  // 审批人信息
+  approverId    String
+  approver      User      @relation(fields: [approverId], references: [id])
+
+  // 任务状态
+  status        ApprovalTaskStatus  @default(PENDING)
+
+  // 审批结果
+  action        ApprovalAction?
+  comment       String?
+
+  // 转交信息
+  transferredTo String?
+  transferredToUser User? @relation("TransferredTasks", fields: [transferredTo], references: [id])
+
+  // 时间信息
+  assignedAt    DateTime  @default(now())
+  completedAt   DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
   @@index([submissionId])
-  @@index([approverId])
+  @@index([approverId, status])
   @@index([status])
-  @@index([step])
+  @@index([assignedAt])
+}
+
+enum ApprovalTaskStatus {
+  PENDING     // 待审批
+  APPROVED    // 已通过
+  REJECTED    // 已驳回
+  RETURNED    // 已退回
+  TRANSFERRED // 已转交
+  CANCELLED   // 已取消
+}
+
+enum ApprovalAction {
+  APPROVE   // 通过
+  REJECT    // 驳回
+  RETURN    // 退回
+  TRANSFER  // 转交
+}
+
+enum ApprovalSubmissionStatus {
+  DRAFT       // 草稿
+  PENDING     // 审批中
+  APPROVED    // 已通过
+  REJECTED    // 已驳回
+  RETURNED    // 已退回
+  CANCELLED   // 已撤回
+}
+
+// 表单模板与实体的绑定配置
+model FormEntityBinding {
+  id          String   @id @default(uuid())
+  templateId  String
+  template    FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // 目标实体配置
+  entityType  String   // student, user, class, parent
+  actionType  String   // create, update, link
+
+  // 字段映射配置（JSON）
+  // [{ formField: "studentName", entityField: "name" }, ...]
+  fieldMappings Json
+
+  // 触发条件
+  triggerOn   String   @default("approved") // approved, submitted
+
+  // 唯一性校验字段配置
+  // [{ formField: "idCard", entityField: "idCard", errorMessage: "身份证号已存在" }]
+  uniqueFields Json?
+
+  // 默认值配置（创建时自动设置的字段）
+  defaultValues Json?
+
+  // 条件配置（满足条件才执行）
+  condition   String?
+
+  // 是否启用
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([templateId])
+  @@index([entityType])
+}
+
+// 表单提交与实体的关联记录（旧模型，保留兼容）
+model FormEntityLink {
+  id           String   @id @default(uuid())
+  submissionId String
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  entityType   String   // student, user, class, parent
+  entityId     String   // 关联的实体ID
+  actionType   String   // created, updated, linked
+
+  // 操作前后数据快照（用于审计和回滚）
+  previousData Json?
+  newData      Json?
+
+  createdAt    DateTime @default(now())
+
+  @@index([submissionId])
+  @@index([entityType, entityId])
+}
+
+// 业务数据关联记录（新模型）
+model BusinessDataLink {
+  id           String   @id @default(uuid())
+
+  // 关联的表单提交
+  submissionId String
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  // 业务数据类型和ID
+  businessType String   // student, teacher, class, parent
+  businessId   String   // 对应业务表的ID
+
+  // 操作类型
+  actionType   String   // created（新建）, updated（更新）, linked（关联）
+
+  // 字段映射快照（用于追溯）
+  fieldMappings Json?
+
+  // 同步前的数据快照（用于回滚）
+  previousData Json?
+
+  // 同步后的数据
+  newData      Json?
+
+  // 同步状态
+  syncStatus   SyncStatus @default(SUCCESS)
+
+  // 错误信息（如果同步失败）
+  errorMessage String?
+
+  createdAt    DateTime @default(now())
+
+  @@index([submissionId])
+  @@index([businessType, businessId])
+  @@index([syncStatus])
+}
+
+enum SyncStatus {
+  SUCCESS     // 同步成功
+  FAILED      // 同步失败
+  ROLLED_BACK // 已回滚
 }
 
 model ReportTemplate {

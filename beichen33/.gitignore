@@ -1,0 +1,57 @@
+# 依赖
+node_modules/
+*/node_modules/
+
+# 构建产物
+dist/
+*/dist/
+build/
+*/build/
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# 环境变量
+.env
+.env.local
+.env.production
+.env.development
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 测试
+coverage/
+.nyc_output/
+
+# PM2
+.pm2/
+ecosystem.config.js.bak
+
+# Docker
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# 其他
+*.tgz
+.yarn/

@@ -10,6 +10,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { CampusModule } from './modules/campus/campus.module';
 import { PositionsModule } from './modules/positions/positions.module';
 import { RecordsModule } from './modules/records/records.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { PrismaService } from './prisma.service';
 import { HealthController } from './health.controller';
 
@@ -26,6 +27,7 @@ import { HealthController } from './health.controller';
     CampusModule,
     PositionsModule,
     RecordsModule,
+    ApprovalsModule,
   ],
   controllers: [HealthController],
   providers: [PrismaService],

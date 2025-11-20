@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { Card, Button, message, Spin, Form, Table, InputNumber, Input, DatePicker, Space, Typography, Divider } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Card, Button, message, Spin, Form, Table, InputNumber, Input, DatePicker, Space, Typography, Divider, Result } from 'antd';
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { formApi } from '../../services/api';
 import FormRenderer from '../../components/FormRenderer/FormRenderer';
 import dayjs from 'dayjs';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 interface DetailColumn {
   id: string;
@@ -24,27 +24,28 @@ interface DetailRow {
   [key: string]: any;
 }
 
-export default function FillForm() {
-  const { templateId } = useParams<{ templateId: string }>();
+export default function ShareForm() {
+  const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [detailData, setDetailData] = useState<DetailRow[]>([]);
   const [calculatedValues, setCalculatedValues] = useState<any>({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const { data: template, isLoading } = useQuery({
-    queryKey: ['form-template', templateId],
-    queryFn: () => formApi.getTemplate(templateId!),
-    enabled: !!templateId,
+  const { data: template, isLoading, error } = useQuery({
+    queryKey: ['share-template', token],
+    queryFn: () => formApi.getTemplateByShareToken(token!),
+    enabled: !!token,
   });
 
   const submitMutation = useMutation({
-    mutationFn: formApi.createSubmission,
+    mutationFn: (data: any) => formApi.submitByShareToken(token!, data),
     onSuccess: () => {
       message.success('提交成功');
-      navigate('/forms/submissions');
+      setIsSubmitted(true);
     },
     onError: () => {
-      message.error('提交失败');
+      message.error('提交失败，请稍后重试');
     },
   });
 
@@ -53,14 +54,12 @@ export default function FillForm() {
     const newRow = { ...row };
     columns.forEach(col => {
       if (col.type === 'calculated' && col.formula) {
-        // 简单乘法公式: "unitPrice * quantity"
         const multiplyMatch = col.formula.match(/(\w+)\s*\*\s*(\w+)/);
         if (multiplyMatch) {
           const a = Number(newRow[multiplyMatch[1]]) || 0;
           const b = Number(newRow[multiplyMatch[2]]) || 0;
           newRow[col.id] = Math.round(a * b * 100) / 100;
         }
-        // 加法公式
         const addMatch = col.formula.match(/(\w+)\s*\+\s*(\w+)/);
         if (addMatch) {
           const a = Number(newRow[addMatch[1]]) || 0;
@@ -100,7 +99,6 @@ export default function FillForm() {
       return;
     }
 
-    // 计算每行
     const calculatedData = newData.map((row, index) => ({
       ...calculateRowFields(row, config.columns || []),
       seq: index + 1,
@@ -108,14 +106,12 @@ export default function FillForm() {
 
     setDetailData(calculatedData);
 
-    // 计算汇总
     if (template?.calculations) {
       const summary = calculateSummary(calculatedData, template.calculations as any[]);
       setCalculatedValues(summary);
     }
   };
 
-  // 添加明细行
   const handleAddRow = () => {
     const newRow: DetailRow = {
       key: `row_${Date.now()}`,
@@ -124,12 +120,10 @@ export default function FillForm() {
     updateDetailData([...detailData, newRow]);
   };
 
-  // 删除明细行
   const handleDeleteRow = (key: string) => {
     updateDetailData(detailData.filter(row => row.key !== key));
   };
 
-  // 更新明细行数据
   const handleRowChange = (key: string, field: string, value: any) => {
     const newData = detailData.map(row => {
       if (row.key === key) {
@@ -184,7 +178,6 @@ export default function FillForm() {
       },
     }));
 
-    // 添加操作列
     columns.push({
       title: '操作',
       width: 60,
@@ -192,6 +185,7 @@ export default function FillForm() {
         <Button
           type="link"
           danger
+          size="small"
           icon={<DeleteOutlined />}
           onClick={() => handleDeleteRow(record.key)}
         />
@@ -206,28 +200,23 @@ export default function FillForm() {
       const values = await form.validateFields();
       const fields = template?.fields as any[] || [];
 
-      // 处理表单数据
       const processedData: any = {};
       const inputFieldsData: Record<string, any> = {};
 
-      // 遍历所有字段值
       Object.keys(values).forEach(key => {
         const value = values[key];
 
-        // 检查是否是填写字段的嵌套数据 (格式: fieldId.entityField)
         if (key.includes('.')) {
           const [fieldId, entityField] = key.split('.');
           if (!inputFieldsData[fieldId]) {
             inputFieldsData[fieldId] = {};
           }
-          // 处理日期
           if (dayjs.isDayjs(value)) {
             inputFieldsData[fieldId][entityField] = value.format('YYYY-MM-DD');
           } else if (value !== undefined && value !== null && value !== '') {
             inputFieldsData[fieldId][entityField] = value;
           }
         } else {
-          // 普通字段
           if (dayjs.isDayjs(value)) {
             processedData[key] = value.format('YYYY-MM-DD');
           } else if (value !== undefined && value !== null && value !== '') {
@@ -236,12 +225,10 @@ export default function FillForm() {
         }
       });
 
-      // 将填写字段数据合并到提交数据中
       Object.keys(inputFieldsData).forEach(fieldId => {
         processedData[fieldId] = inputFieldsData[fieldId];
       });
 
-      // 验证明细表是否有必填字段
       const config = template?.detailTableConfig as any;
       if (config?.enabled && config?.columns) {
         const requiredColumns = config.columns.filter((col: any) => col.required);
@@ -258,7 +245,6 @@ export default function FillForm() {
       }
 
       submitMutation.mutate({
-        templateId: templateId!,
         formData: processedData,
         detailData: detailData.map(({ key, ...rest }) => rest),
       });
@@ -270,26 +256,65 @@ export default function FillForm() {
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: '50px' }}>
-        <Spin size="large" />
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: '#f0f2f5'
+      }}>
+        <Spin size="large" tip="加载中..." />
       </div>
     );
   }
 
-  if (!template) {
+  if (error || !template) {
     return (
-      <Card>
-        <p>表单不存在</p>
-      </Card>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: '#f0f2f5',
+        padding: '20px'
+      }}>
+        <Card style={{ maxWidth: 500, width: '100%' }}>
+          <Result
+            status="error"
+            title="链接无效或已过期"
+            subTitle="请联系管理员获取新的填写链接"
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  if (isSubmitted) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: '#f0f2f5',
+        padding: '20px'
+      }}>
+        <Card style={{ maxWidth: 500, width: '100%' }}>
+          <Result
+            status="success"
+            title="提交成功"
+            subTitle="感谢您的填写，我们已经收到您的信息"
+            icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+          />
+        </Card>
+      </div>
     );
   }
 
   const detailConfig = template.detailTableConfig as any;
   const hasDetailTable = detailConfig?.enabled;
 
-  // 处理字段，添加默认 mode
   const processedFields = (template.fields as any[] || []).map((field: any) => {
-    // 如果字段没有 mode，根据类型推断
     if (!field.mode) {
       if (['student_select', 'teacher_select', 'class_select', 'campus_select'].includes(field.type)) {
         return {
@@ -307,63 +332,91 @@ export default function FillForm() {
   });
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <Card
-        title={template.title}
-        extra={
-          <Button type="primary" onClick={handleSubmit} loading={submitMutation.isPending}>
-            提交
-          </Button>
-        }
-      >
-        {template.description && (
-          <div style={{ marginBottom: 24, color: '#666' }}>
-            {template.description}
-          </div>
-        )}
-
-        {/* 主表单 */}
-        <FormRenderer
-          fields={processedFields}
-          form={form}
-        />
-
-        {/* 明细表 */}
-        {hasDetailTable && (
-          <>
-            <Divider>{detailConfig.title || '明细表'}</Divider>
-
-            <div style={{ marginBottom: 16 }}>
-              <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />}>
-                添加明细行
-              </Button>
-            </div>
-
-            <Table
-              dataSource={detailData}
-              columns={generateDetailColumns()}
-              pagination={false}
-              rowKey="key"
-              scroll={{ x: 'max-content' }}
-              size="small"
-              bordered
-            />
-
-            {/* 汇总信息 */}
-            {template.calculations && (template.calculations as any[]).length > 0 && (
-              <div style={{ marginTop: 16, textAlign: 'right' }}>
-                <Space direction="vertical" align="end">
-                  {(template.calculations as any[]).map((calc: any) => (
-                    <Text key={calc.field} strong>
-                      {calc.label}: {calculatedValues[calc.field]?.toFixed?.(2) || calculatedValues[calc.field] || 0}
-                    </Text>
-                  ))}
-                </Space>
-              </div>
+    <div style={{
+      minHeight: '100vh',
+      background: '#f0f2f5',
+      padding: '20px'
+    }}>
+      <div style={{
+        maxWidth: 800,
+        margin: '0 auto'
+      }}>
+        <Card
+          style={{
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            marginBottom: 20
+          }}
+        >
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <Title level={3} style={{ marginBottom: 8 }}>
+              {template.title}
+            </Title>
+            {template.description && (
+              <Text type="secondary">{template.description}</Text>
             )}
-          </>
-        )}
-      </Card>
+          </div>
+
+          {/* 主表单 */}
+          <FormRenderer
+            fields={processedFields}
+            form={form}
+          />
+
+          {/* 明细表 */}
+          {hasDetailTable && (
+            <>
+              <Divider>{detailConfig.title || '明细表'}</Divider>
+
+              <div style={{ marginBottom: 16 }}>
+                <Button type="dashed" onClick={handleAddRow} icon={<PlusOutlined />} block>
+                  添加明细行
+                </Button>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <Table
+                  dataSource={detailData}
+                  columns={generateDetailColumns()}
+                  pagination={false}
+                  rowKey="key"
+                  size="small"
+                  bordered
+                  scroll={{ x: 'max-content' }}
+                />
+              </div>
+
+              {/* 汇总信息 */}
+              {template.calculations && (template.calculations as any[]).length > 0 && (
+                <div style={{ marginTop: 16, textAlign: 'right' }}>
+                  <Space direction="vertical" align="end">
+                    {(template.calculations as any[]).map((calc: any) => (
+                      <Text key={calc.field} strong>
+                        {calc.label}: {calculatedValues[calc.field]?.toFixed?.(2) || calculatedValues[calc.field] || 0}
+                      </Text>
+                    ))}
+                  </Space>
+                </div>
+              )}
+            </>
+          )}
+
+          <div style={{ marginTop: 24, textAlign: 'center' }}>
+            <Button
+              type="primary"
+              size="large"
+              onClick={handleSubmit}
+              loading={submitMutation.isPending}
+              style={{ minWidth: 200 }}
+            >
+              提交
+            </Button>
+          </div>
+        </Card>
+
+        <div style={{ textAlign: 'center', color: '#999', fontSize: 12 }}>
+          <Text type="secondary">本表单由北辰幼儿园管理系统提供</Text>
+        </div>
+      </div>
     </div>
   );
 }

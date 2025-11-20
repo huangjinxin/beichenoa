@@ -1,9 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { ENTITY_BINDING_TEMPLATES } from './preset-templates';
+import { EntityBindingService } from './entity-binding.service';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class FormsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => EntityBindingService))
+    private entityBindingService: EntityBindingService,
+  ) {}
 
   // ==================== 模板管理 ====================
 
@@ -17,12 +24,30 @@ export class FormsService {
 
     return this.prisma.formTemplate.findMany({
       where,
+      include: {
+        approvalFlows: {
+          where: { deletedAt: null, isActive: true },
+          select: { id: true, name: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findTemplate(id: string) {
-    return this.prisma.formTemplate.findUnique({ where: { id } });
+    return this.prisma.formTemplate.findUnique({
+      where: { id },
+      include: {
+        approvalFlows: {
+          where: { deletedAt: null, isActive: true },
+          include: {
+            nodes: {
+              orderBy: { sequence: 'asc' },
+            },
+          },
+        },
+      },
+    });
   }
 
   async createTemplate(data: any) {
@@ -33,7 +58,6 @@ export class FormsService {
         fields: data.fields || [],
         detailTableConfig: data.detailTableConfig || null,
         calculations: data.calculations || null,
-        approvalConfig: data.approvalConfig || null,
         serialNumberConfig: data.serialNumberConfig || null,
         isPreset: data.isPreset || false,
         presetType: data.presetType || null,
@@ -50,7 +74,6 @@ export class FormsService {
         fields: data.fields,
         detailTableConfig: data.detailTableConfig,
         calculations: data.calculations,
-        approvalConfig: data.approvalConfig,
         serialNumberConfig: data.serialNumberConfig,
       },
     });
@@ -68,6 +91,12 @@ export class FormsService {
   async getPresetTemplates() {
     return this.prisma.formTemplate.findMany({
       where: { isPreset: true, deletedAt: null },
+      include: {
+        approvalFlows: {
+          where: { deletedAt: null, isActive: true },
+          select: { id: true, name: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -88,74 +117,113 @@ export class FormsService {
         fields: preset.fields as any,
         detailTableConfig: preset.detailTableConfig as any,
         calculations: preset.calculations as any,
-        approvalConfig: preset.approvalConfig as any,
         serialNumberConfig: preset.serialNumberConfig as any,
         isPreset: false,
       },
     });
   }
 
-  // 初始化预置模板（幼儿园事前审批表）
+  // 初始化预置模板（包含数据联动功能的表单）
   async initPresetTemplates() {
-    const existingPreset = await this.prisma.formTemplate.findFirst({
+    const results = [];
+
+    // 1. 创建原有的维修审批表
+    const existingRepair = await this.prisma.formTemplate.findFirst({
       where: { presetType: 'repair_approval', isPreset: true },
     });
 
-    if (existingPreset) {
-      return existingPreset;
+    if (!existingRepair) {
+      const repairTemplate = await this.prisma.formTemplate.create({
+        data: {
+          title: '幼儿园事前审批表（维修/小额采购）',
+          description: '用于维修和小额采购的事前审批流程',
+          isPreset: true,
+          presetType: 'repair_approval',
+          fields: [
+            { id: 'handler', type: 'teacher_select', label: '经办人', required: true },
+            { id: 'fillDate', type: 'date', label: '填写时间', required: true },
+            { id: 'logisticsManager', type: 'teacher_select', label: '总务处', required: true },
+            { id: 'name', type: 'text', label: '名称', required: true, placeholder: '请输入项目名称' },
+            { id: 'reason', type: 'textarea', label: '原因', required: true, placeholder: '请输入申请原因' },
+            { id: 'witness', type: 'teacher_select', label: '证明人', required: true },
+            { id: 'managerOpinion', type: 'approval', label: '分管领导意见', required: false },
+            { id: 'directorOpinion', type: 'approval', label: '主要领导意见', required: false },
+          ],
+          detailTableConfig: {
+            enabled: true,
+            title: '维修明细',
+            columns: [
+              { id: 'seq', type: 'sequence', label: '序号', width: 60 },
+              { id: 'repairDate', type: 'date', label: '维修日期', width: 120, required: true },
+              { id: 'location', type: 'text', label: '维修地点', width: 120, required: true },
+              { id: 'projectName', type: 'text', label: '项目名称', width: 150, required: true },
+              { id: 'unitPrice', type: 'number', label: '单价', width: 100, required: true },
+              { id: 'quantity', type: 'number', label: '数量', width: 80, required: true },
+              { id: 'total', type: 'calculated', label: '合计', width: 100, formula: 'unitPrice * quantity' },
+              { id: 'purpose', type: 'text', label: '用途', width: 120 },
+              { id: 'repairPerson', type: 'text', label: '维修人', width: 100 },
+              { id: 'detailWitness', type: 'text', label: '证明人', width: 100 },
+              { id: 'remark', type: 'text', label: '备注', width: 120 },
+            ],
+          },
+          calculations: [
+            { field: 'grandTotal', formula: 'SUM(details.total)', label: '总金额' },
+            { field: 'itemCount', formula: 'COUNT(details)', label: '项目数量' },
+          ],
+          serialNumberConfig: {
+            prefix: 'REPAIR',
+            dateFormat: 'YYYY',
+            digits: 3,
+          },
+        },
+      });
+      results.push({ type: 'repair_approval', template: repairTemplate });
     }
 
-    // 创建幼儿园事前审批表预置模板
-    return this.prisma.formTemplate.create({
-      data: {
-        title: '幼儿园事前审批表（维修/小额采购）',
-        description: '用于维修和小额采购的事前审批流程',
-        isPreset: true,
-        presetType: 'repair_approval',
-        fields: [
-          { id: 'handler', type: 'teacher_select', label: '经办人', required: true },
-          { id: 'fillDate', type: 'date', label: '填写时间', required: true },
-          { id: 'logisticsManager', type: 'teacher_select', label: '总务处', required: true },
-          { id: 'name', type: 'text', label: '名称', required: true, placeholder: '请输入项目名称' },
-          { id: 'reason', type: 'textarea', label: '原因', required: true, placeholder: '请输入申请原因' },
-          { id: 'witness', type: 'teacher_select', label: '证明人', required: true },
-          { id: 'managerOpinion', type: 'approval', label: '分管领导意见', required: false },
-          { id: 'directorOpinion', type: 'approval', label: '主要领导意见', required: false },
-        ],
-        detailTableConfig: {
-          enabled: true,
-          title: '维修明细',
-          columns: [
-            { id: 'seq', type: 'sequence', label: '序号', width: 60 },
-            { id: 'repairDate', type: 'date', label: '维修日期', width: 120, required: true },
-            { id: 'location', type: 'text', label: '维修地点', width: 120, required: true },
-            { id: 'projectName', type: 'text', label: '项目名称', width: 150, required: true },
-            { id: 'unitPrice', type: 'number', label: '单价', width: 100, required: true },
-            { id: 'quantity', type: 'number', label: '数量', width: 80, required: true },
-            { id: 'total', type: 'calculated', label: '合计', width: 100, formula: 'unitPrice * quantity' },
-            { id: 'purpose', type: 'text', label: '用途', width: 120 },
-            { id: 'repairPerson', type: 'text', label: '维修人', width: 100 },
-            { id: 'detailWitness', type: 'text', label: '证明人', width: 100 },
-            { id: 'remark', type: 'text', label: '备注', width: 120 },
-          ],
-        },
-        calculations: [
-          { field: 'grandTotal', formula: 'SUM(details.total)', label: '总金额' },
-          { field: 'itemCount', formula: 'COUNT(details)', label: '项目数量' },
-        ],
-        approvalConfig: {
-          levels: [
-            { name: '分管领导', field: 'managerOpinion', role: 'MANAGER' },
-            { name: '主要领导', field: 'directorOpinion', role: 'DIRECTOR' },
-          ],
-        },
-        serialNumberConfig: {
-          prefix: 'REPAIR',
-          dateFormat: 'YYYY',
-          digits: 3,
-        },
-      },
-    });
+    // 2. 创建数据联动相关的预置模板
+    for (const templateDef of ENTITY_BINDING_TEMPLATES) {
+      const existing = await this.prisma.formTemplate.findFirst({
+        where: { presetType: templateDef.presetType, isPreset: true },
+      });
+
+      if (!existing) {
+        // 创建模板
+        const template = await this.prisma.formTemplate.create({
+          data: {
+            title: templateDef.title,
+            description: templateDef.description,
+            isPreset: true,
+            presetType: templateDef.presetType,
+            fields: templateDef.fields,
+            serialNumberConfig: templateDef.serialNumberConfig || null,
+          },
+        });
+
+        // 创建实体绑定配置
+        if (templateDef.entityBindingConfig) {
+          const bindingConfig = templateDef.entityBindingConfig as any;
+          await this.prisma.formEntityBinding.create({
+            data: {
+              templateId: template.id,
+              entityType: bindingConfig.entityType,
+              actionType: bindingConfig.actionType,
+              triggerOn: bindingConfig.triggerOn,
+              fieldMappings: bindingConfig.fieldMappings,
+              uniqueFields: bindingConfig.uniqueFields || null,
+              defaultValues: bindingConfig.defaultValues || null,
+              isActive: true,
+            },
+          });
+        }
+
+        results.push({ type: templateDef.presetType, template });
+      }
+    }
+
+    return {
+      message: `初始化完成，创建了 ${results.length} 个预置模板`,
+      templates: results,
+    };
   }
 
   // ==================== 表单提交 ====================
@@ -177,7 +245,7 @@ export class FormsService {
         include: {
           template: { select: { title: true, detailTableConfig: true } },
           user: { select: { name: true, email: true } },
-          approvals: true,
+          approvalTasks: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -193,7 +261,7 @@ export class FormsService {
       include: {
         template: true,
         user: { select: { id: true, name: true, email: true } },
-        approvals: true,
+        approvalTasks: true,
       },
     });
   }
@@ -201,9 +269,20 @@ export class FormsService {
   async createSubmission(data: any, userId: string) {
     const { templateId, formData, detailData } = data;
 
-    // 获取模板配置
+    // 获取模板配置和关联的审批流程
     const template = await this.prisma.formTemplate.findUnique({
       where: { id: templateId },
+      include: {
+        approvalFlows: {
+          where: { deletedAt: null, isActive: true },
+          include: {
+            nodes: {
+              orderBy: { sequence: 'asc' },
+            },
+          },
+          take: 1, // 取第一个激活的审批流程
+        },
+      },
     });
 
     if (!template) {
@@ -225,6 +304,10 @@ export class FormsService {
       template.calculations as any,
     );
 
+    // 检查是否有审批流程
+    const approvalFlow = template.approvalFlows?.[0];
+    const hasApprovalFlow = approvalFlow && approvalFlow.nodes.length > 0;
+
     const submission = await this.prisma.formSubmission.create({
       data: {
         serialNumber,
@@ -233,17 +316,144 @@ export class FormsService {
         calculatedValues,
         template: { connect: { id: templateId } },
         user: { connect: { id: userId } },
+        // 如果有审批流程，设置初始状态
+        ...(hasApprovalFlow
+          ? {
+              approvalFlow: { connect: { id: approvalFlow.id } },
+              approvalStatus: 'PENDING',
+              currentNodeSequence: 1,
+            }
+          : {}),
       },
       include: {
-        template: { select: { title: true, approvalConfig: true } },
+        template: { select: { title: true } },
         user: { select: { name: true } },
       },
     });
 
     // 自动启动审批流程
-    await this.startApprovalFlow(submission.id);
+    if (hasApprovalFlow) {
+      const firstNode = approvalFlow.nodes[0];
+
+      // 动态解析审批人
+      const resolvedApprovers = await this.resolveNodeApprovers(firstNode, userId);
+
+      if (resolvedApprovers && resolvedApprovers.length > 0) {
+        // 为第一个节点的审批人创建审批任务
+        await this.prisma.approvalTask.createMany({
+          data: resolvedApprovers.map(approver => ({
+            submissionId: submission.id,
+            flowId: approvalFlow.id,
+            nodeId: firstNode.id,
+            nodeName: firstNode.name,
+            nodeSequence: firstNode.sequence,
+            approverId: approver.userId,
+            status: 'PENDING',
+          })),
+        });
+      }
+    }
 
     return submission;
+  }
+
+  /**
+   * 动态解析节点审批人
+   */
+  private async resolveNodeApprovers(
+    node: any,
+    submitterId: string,
+  ): Promise<{ userId: string; userName: string }[]> {
+    const approverType = node.approverType || 'user';
+    const approversConfig = (node.approvers || []) as { userId: string; userName: string }[];
+
+    switch (approverType) {
+      case 'user':
+        // 指定用户：直接返回配置的用户列表
+        return approversConfig;
+
+      case 'role':
+        // 角色：根据角色查询所有用户
+        const roleUsers: { userId: string; userName: string }[] = [];
+        for (const roleItem of approversConfig) {
+          const users = await this.prisma.user.findMany({
+            where: {
+              role: roleItem.userId as any, // userId存储的是角色值
+              isActive: true,
+              deletedAt: null,
+            },
+            select: { id: true, name: true },
+          });
+          roleUsers.push(...users.map(u => ({ userId: u.id, userName: u.name })));
+        }
+        return roleUsers;
+
+      case 'position':
+        // 职位：根据职位ID查询所有用户
+        const positionUsers: { userId: string; userName: string }[] = [];
+        for (const posItem of approversConfig) {
+          const users = await this.prisma.user.findMany({
+            where: {
+              positionId: posItem.userId, // userId存储的是职位ID
+              isActive: true,
+              deletedAt: null,
+            },
+            select: { id: true, name: true },
+          });
+          positionUsers.push(...users.map(u => ({ userId: u.id, userName: u.name })));
+        }
+        return positionUsers;
+
+      case 'superior':
+        // 上级：根据提交人查找其上级
+        const user = await this.prisma.user.findUnique({
+          where: { id: submitterId },
+          include: { position: true },
+        });
+
+        if (!user || !user.position) {
+          return [];
+        }
+
+        // 通过职位父级或层级查找上级
+        let superiors: any[] = [];
+
+        if (user.position.parentId) {
+          superiors = await this.prisma.user.findMany({
+            where: {
+              positionId: user.position.parentId,
+              campusId: user.campusId,
+              isActive: true,
+              deletedAt: null,
+            },
+            select: { id: true, name: true },
+          });
+        }
+
+        if (superiors.length === 0) {
+          // 按层级查找
+          superiors = await this.prisma.user.findMany({
+            where: {
+              campusId: user.campusId,
+              isActive: true,
+              deletedAt: null,
+              position: {
+                level: { lt: user.position.level },
+              },
+            },
+            orderBy: {
+              position: { level: 'desc' },
+            },
+            take: 1,
+            select: { id: true, name: true },
+          });
+        }
+
+        return superiors.map(s => ({ userId: s.id, userName: s.name }));
+
+      default:
+        return approversConfig;
+    }
   }
 
   async updateSubmission(id: string, data: any) {
@@ -383,11 +593,13 @@ export class FormsService {
     }
   }
 
-  // ==================== 审批功能 ====================
+  // ==================== 审批功能（旧系统，已废弃） ====================
+  // TODO: 使用新的审批流程系统 (ApprovalFlow, ApprovalNode, ApprovalTask)
+  // 以下代码使用旧的审批模型，已被新系统替代
 
-  /**
+  /*
    * 提交表单后自动启动审批流程
-   */
+   *
   async startApprovalFlow(submissionId: string) {
     const submission = await this.prisma.formSubmission.findUnique({
       where: { id: submissionId },
@@ -434,9 +646,7 @@ export class FormsService {
     });
   }
 
-  /**
-   * 根据审批层级配置获取审批人列表
-   */
+  // 根据审批层级配置获取审批人列表
   private async getApproversForLevel(level: any, submission: any): Promise<string[]> {
     // 如果配置了具体的用户ID列表
     if (level.approvers && Array.isArray(level.approvers)) {
@@ -475,9 +685,7 @@ export class FormsService {
     return [];
   }
 
-  /**
-   * 审批操作（通过/驳回）
-   */
+  // 审批操作（通过/驳回）
   async approveSubmission(
     submissionId: string,
     approverId: string,
@@ -642,13 +850,19 @@ export class FormsService {
         },
       });
 
+      // 自动处理字段模式 - 创建实体
+      try {
+        await this.entityBindingService.processSubmissionByFieldModes(submissionId);
+      } catch (error) {
+        console.error('处理字段模式失败:', error);
+        // 不阻塞审批流程，记录错误即可
+      }
+
       return { success: true, message: '审批流程完成' };
     }
   }
 
-  /**
-   * 获取我的待审批列表
-   */
+  // 获取我的待审批列表
   async getMyPendingApprovals(userId: string, query: any) {
     const { page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
@@ -682,9 +896,7 @@ export class FormsService {
     return { data, total, page: Number(page), limit: Number(limit) };
   }
 
-  /**
-   * 获取我已审批的列表
-   */
+  // 获取我已审批的列表
   async getMyApprovedList(userId: string, query: any) {
     const { page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
@@ -717,7 +929,7 @@ export class FormsService {
 
     return { data, total, page: Number(page), limit: Number(limit) };
   }
-
+  */
   // ==================== 实时计算API ====================
 
   // 计算单行明细
@@ -732,5 +944,91 @@ export class FormsService {
     });
 
     return newRow;
+  }
+
+  // ==================== 表单分享功能 ====================
+
+  /**
+   * 生成分享链接
+   */
+  async generateShareLink(templateId: string) {
+    const template = await this.prisma.formTemplate.findUnique({
+      where: { id: templateId },
+    });
+
+    if (!template) {
+      throw new Error('模板不存在');
+    }
+
+    // 如果已有分享token，直接返回
+    if (template.shareToken) {
+      return { token: template.shareToken };
+    }
+
+    // 生成新的分享token（32位随机字符串）
+    const token = randomBytes(16).toString('hex');
+
+    await this.prisma.formTemplate.update({
+      where: { id: templateId },
+      data: { shareToken: token },
+    });
+
+    return { token };
+  }
+
+  /**
+   * 通过分享token获取模板
+   */
+  async getTemplateByShareToken(token: string) {
+    return this.prisma.formTemplate.findFirst({
+      where: {
+        shareToken: token,
+        isActive: true,
+        deletedAt: null,
+      },
+    });
+  }
+
+  /**
+   * 通过分享token提交表单（匿名提交）
+   */
+  async submitByShareToken(token: string, data: any) {
+    const { formData, detailData } = data;
+
+    // 获取模板
+    const template = await this.getTemplateByShareToken(token);
+    if (!template) {
+      throw new Error('分享链接无效或已过期');
+    }
+
+    // 生成流水号
+    const serialNumber = await this.generateSerialNumber(template);
+
+    // 计算明细表合计
+    const processedDetailData = this.calculateDetailTotals(
+      detailData || [],
+      template.detailTableConfig as any,
+    );
+
+    // 计算汇总值
+    const calculatedValues = this.calculateSummary(
+      processedDetailData,
+      template.calculations as any,
+    );
+
+    // 创建匿名提交（不关联用户）
+    const submission = await this.prisma.formSubmission.create({
+      data: {
+        serialNumber,
+        data: formData,
+        detailData: processedDetailData,
+        calculatedValues,
+        templateId: template.id,
+        submittedBy: 'anonymous', // 匿名提交标记
+        approvalStatus: 'DRAFT',
+      },
+    });
+
+    return submission;
   }
 }

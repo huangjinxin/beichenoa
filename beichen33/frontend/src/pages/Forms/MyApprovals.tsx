@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Table, Tag, Space, Button, Modal, Input, message, Card, Descriptions, Divider, Typography, Tabs, Badge } from 'antd';
 import { EyeOutlined, CheckOutlined, CloseOutlined, RollbackOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { formApi } from '../../services/api';
+import { approvalApi } from '../../services/api';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
@@ -18,23 +18,23 @@ export default function MyApprovals() {
 
   // 获取待审批列表
   const { data: pendingData, isLoading: pendingLoading } = useQuery({
-    queryKey: ['my-pending-approvals'],
-    queryFn: () => formApi.getMyPendingApprovals(),
+    queryKey: ['my-pending-tasks'],
+    queryFn: () => approvalApi.getMyPendingTasks(),
   });
 
   // 获取已审批列表
   const { data: approvedData, isLoading: approvedLoading } = useQuery({
-    queryKey: ['my-approved-list'],
-    queryFn: () => formApi.getMyApprovedList(),
+    queryKey: ['my-completed-tasks'],
+    queryFn: () => approvalApi.getMyCompletedTasks(),
   });
 
   // 审批操作
   const approveMutation = useMutation({
-    mutationFn: ({ id, action, comment }: { id: string; action: 'APPROVE' | 'REJECT' | 'RETURN'; comment?: string }) =>
-      formApi.approveSubmission(id, { action, comment }),
+    mutationFn: ({ taskId, action, comment }: { taskId: string; action: 'APPROVE' | 'REJECT' | 'RETURN'; comment?: string }) =>
+      approvalApi.processTask(taskId, { action, comment }),
     onSuccess: (result: any) => {
-      queryClient.invalidateQueries({ queryKey: ['my-pending-approvals'] });
-      queryClient.invalidateQueries({ queryKey: ['my-approved-list'] });
+      queryClient.invalidateQueries({ queryKey: ['my-pending-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['my-completed-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['form-submissions'] });
       message.success(result.message || '操作成功');
       setActionModalOpen(false);
@@ -56,7 +56,7 @@ export default function MyApprovals() {
     if (action === 'APPROVE') {
       // 通过可以直接操作
       approveMutation.mutate({
-        id: record.submission.id,
+        taskId: record.id,
         action: 'APPROVE',
         comment: '',
       });
@@ -69,7 +69,7 @@ export default function MyApprovals() {
   const handleActionSubmit = () => {
     if (!currentApproval) return;
     approveMutation.mutate({
-      id: currentApproval.submission.id,
+      taskId: currentApproval.id,
       action: actionType,
       comment,
     });
@@ -108,15 +108,24 @@ export default function MyApprovals() {
     },
     {
       title: '提交人',
-      dataIndex: ['submission', 'user', 'name'],
       key: 'submitter',
+      render: (_: any, record: any) => (
+        <Space direction="vertical" size={0}>
+          <Text>{record.submission?.user?.name}</Text>
+          {record.submission?.user?.position?.name && (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.submission.user.position.name}
+            </Text>
+          )}
+        </Space>
+      ),
     },
     {
       title: '审批节点',
-      dataIndex: 'stepName',
-      key: 'stepName',
+      dataIndex: 'nodeName',
+      key: 'nodeName',
       render: (text: string, record: any) => (
-        <Tag color="blue">{text || `第${record.step}级`}</Tag>
+        <Tag color="blue">{text || `第${record.nodeSequence}级`}</Tag>
       ),
     },
     {
@@ -142,6 +151,7 @@ export default function MyApprovals() {
             icon={<CheckOutlined />}
             style={{ color: '#52c41a' }}
             onClick={() => handleAction(record, 'APPROVE')}
+            loading={approveMutation.isPending}
           >
             通过
           </Button>
@@ -185,10 +195,16 @@ export default function MyApprovals() {
       key: 'submitter',
     },
     {
+      title: '审批节点',
+      dataIndex: 'nodeName',
+      key: 'nodeName',
+      render: (text: string) => <Tag color="default">{text}</Tag>,
+    },
+    {
       title: '审批结果',
       dataIndex: 'action',
       key: 'action',
-      render: (action: string, record: any) => {
+      render: (action: string) => {
         const color = action === 'APPROVE' ? 'green' : action === 'REJECT' ? 'red' : 'orange';
         return <Tag color={color}>{getActionText(action)}</Tag>;
       },
@@ -202,8 +218,8 @@ export default function MyApprovals() {
     },
     {
       title: '审批时间',
-      dataIndex: 'approvedAt',
-      key: 'approvedAt',
+      dataIndex: 'completedAt',
+      key: 'completedAt',
       render: (date: string) => date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-',
     },
     {

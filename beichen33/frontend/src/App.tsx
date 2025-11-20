@@ -23,6 +23,7 @@ import FormTemplates from './pages/Forms/Templates';
 import FormSubmissions from './pages/Forms/Submissions';
 import FillForm from './pages/Forms/FillForm';
 import MyApprovals from './pages/Forms/MyApprovals';
+import ShareForm from './pages/Forms/ShareForm';
 import Reports from './pages/Reports/Reports';
 import DailyObservationList from './pages/Records/DailyObservation/List';
 import DailyObservationCreate from './pages/Records/DailyObservation/Create';
@@ -45,6 +46,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forms/share/:token" element={<ShareForm />} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/students" element={<PrivateRoute><StudentList /></PrivateRoute>} />
       <Route path="/students/:id" element={<PrivateRoute><StudentDetail /></PrivateRoute>} />
