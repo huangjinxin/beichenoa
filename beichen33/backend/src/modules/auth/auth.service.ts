@@ -29,11 +29,11 @@ export class AuthService {
   /**
    * 生成邮箱地址
    * @param name 中文名字
-   * @returns email地址（名字全拼@guchengbeiyou.cn）
+   * @returns email地址（名字全拼@gichengbeiyou.cn）
    */
   private generateEmail(name: string): string {
     const pinyinName = this.nameToPinyin(name);
-    return `${pinyinName}@guchengbeiyou.cn`;
+    return `${pinyinName}@gichengbeiyou.cn`;
   }
 
   /**
@@ -134,27 +134,39 @@ export class AuthService {
    * @param data 注册数据
    */
   async register(data: {
+    roleType: 'TEACHER' | 'STUDENT';
     name: string;
     idCard: string;
     gender: string;
     birthday: string;
+    campusId: string;
+    classId: string;
+    positionId?: string;
     phone?: string;
-    address?: string;
     password?: string;
   }) {
     try {
-      console.log('[AUTH] Registration attempt:', { name: data.name, idCard: data.idCard });
-
-      // 1. 检查身份证号是否已被注册
-      const existingUserByIdCard = await this.prisma.user.findUnique({
-        where: { idCard: data.idCard },
+      console.log('[AUTH] Registration attempt:', {
+        name: data.name,
+        idCard: data.idCard,
+        roleType: data.roleType
       });
 
-      if (existingUserByIdCard) {
+      // 1. 检查身份证号是否已被注册（检查User和Student表）
+      const [existingUser, existingStudent] = await Promise.all([
+        this.prisma.user.findUnique({
+          where: { idCard: data.idCard },
+        }),
+        this.prisma.student.findUnique({
+          where: { idCard: data.idCard },
+        }),
+      ]);
+
+      if (existingUser || existingStudent) {
         throw new BadRequestException('该身份证号已被注册');
       }
 
-      // 2. 自动生成邮箱（名字全拼@guchengbeiyou.cn）
+      // 2. 自动生成邮箱（名字全拼@gichengbeiyou.cn）
       const baseEmail = this.generateEmail(data.name);
       const email = await this.getUniqueEmail(baseEmail);
 
@@ -164,33 +176,87 @@ export class AuthService {
       const password = data.password || '123456';
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // 4. 创建用户（状态为待审核）
-      const user = await this.prisma.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          name: data.name,
-          idCard: data.idCard,
-          gender: data.gender,
-          birthday: new Date(data.birthday),
-          phone: data.phone,
-          // 审核相关字段
-          approvalStatus: 'PENDING', // 待审核
-          // role 在审核通过时由管理员分配
-          // campusId 在审核通过时由管理员分配
-        },
-      });
+      if (data.roleType === 'STUDENT') {
+        // 4A. 注册学生 - 直接创建Student记录，自动审核通过
+        const student = await this.prisma.student.create({
+          data: {
+            name: data.name,
+            idCard: data.idCard,
+            gender: data.gender,
+            birthday: new Date(data.birthday),
+            enrollDate: new Date(), // 注册日期作为入学日期
+            campusId: data.campusId,
+            classId: data.classId,
+            primaryPhone: data.phone,
+          },
+          include: {
+            campus: true,
+            class: true,
+          },
+        });
 
-      console.log('[AUTH] User registered successfully:', user.id);
+        console.log('[AUTH] Student registered successfully:', student.id);
 
-      return {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        idCard: user.idCard,
-        approvalStatus: user.approvalStatus,
-        message: '注册成功！请等待管理员审核。审核通过后，您可以使用邮箱或身份证号登录。',
-      };
+        return {
+          id: student.id,
+          email: email, // 返回生成的邮箱供参考
+          name: student.name,
+          idCard: student.idCard,
+          roleType: 'STUDENT',
+          message: '学生注册成功！相关信息已自动同步。',
+        };
+
+      } else {
+        // 4B. 注册教师 - 创建User记录，状态为待审核
+        if (!data.phone) {
+          throw new BadRequestException('教师注册必须填写手机号');
+        }
+        if (!data.positionId) {
+          throw new BadRequestException('教师注册必须选择职位');
+        }
+
+        const user = await this.prisma.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            name: data.name,
+            idCard: data.idCard,
+            gender: data.gender,
+            birthday: new Date(data.birthday),
+            phone: data.phone,
+            campus: {
+              connect: { id: data.campusId },
+            },
+            position: {
+              connect: { id: data.positionId },
+            },
+            // 关联班级
+            classes: {
+              connect: { id: data.classId },
+            },
+            // 审核相关字段
+            approvalStatus: 'PENDING', // 待审核
+            // role 在审核通过时由管理员分配
+          },
+          include: {
+            campus: true,
+            position: true,
+            classes: true,
+          },
+        });
+
+        console.log('[AUTH] Teacher registered successfully:', user.id);
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          idCard: user.idCard,
+          roleType: 'TEACHER',
+          approvalStatus: user.approvalStatus,
+          message: '教师注册成功！请等待管理员审核。审核通过后，您可以使用邮箱或身份证号登录。',
+        };
+      }
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
