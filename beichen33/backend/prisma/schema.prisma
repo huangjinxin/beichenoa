@@ -146,6 +146,7 @@ model User {
   transferredTasks  ApprovalTask[]     @relation("TransferredTasks")
   attendanceRecords AttendanceRecord[] @relation("AttendanceRecordCreator")
   studentAttendances Attendance[]
+  parentProfile     Parent?            @relation("ParentUser")
 
   @@index([email])
   @@index([role])
@@ -201,6 +202,9 @@ model Parent {
   email       String?
   relation    String
 
+  userId      String?   @unique
+  user        User?     @relation("ParentUser", fields: [userId], references: [id])
+
   students    StudentParent[]
 
   createdAt   DateTime  @default(now())
@@ -208,6 +212,7 @@ model Parent {
   deletedAt   DateTime?
 
   @@index([phone])
+  @@index([userId])
 }
 
 model StudentParent {

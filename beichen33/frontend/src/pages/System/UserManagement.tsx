@@ -15,7 +15,7 @@ import {
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userApi, campusApi } from '../../services/api';
+import { userApi, campusApi, classApi, studentApi } from '../../services/api';
 import dayjs from 'dayjs';
 
 export default function UserManagement() {
@@ -23,6 +23,9 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
+
+  // 监听表单中的角色字段变化
+  const selectedRole = Form.useWatch('role', form) || '';
 
   // 获取用户列表
   const { data: usersData, isLoading } = useQuery({
@@ -36,8 +39,22 @@ export default function UserManagement() {
     queryFn: () => campusApi.getAll(),
   });
 
+  // 获取班级列表
+  const { data: classesData } = useQuery({
+    queryKey: ['classes'],
+    queryFn: () => classApi.getAll(),
+  });
+
+  // 获取学生列表
+  const { data: studentsData } = useQuery({
+    queryKey: ['students'],
+    queryFn: () => studentApi.getAll(),
+  });
+
   const users = usersData?.data || [];
   const campusList = campusData || [];
+  const classesList = classesData || [];
+  const studentsList = studentsData?.data || [];
 
   // 创建用户
   const createMutation = useMutation({
@@ -88,9 +105,18 @@ export default function UserManagement() {
 
   const handleEdit = (record: any) => {
     setEditingUser(record);
+
+    // 提取班级ID列表
+    const classIds = record.classes?.map((c: any) => c.id) || [];
+
+    // 提取学生ID列表（从家长档案中获取）
+    const studentIds = record.parentProfile?.students?.map((s: any) => s.student.id) || [];
+
     form.setFieldsValue({
       ...record,
       campusId: record.campus?.id,
+      classIds,
+      studentIds,
       password: undefined, // 编辑时不显示密码
     });
     setIsModalOpen(true);
@@ -178,6 +204,42 @@ export default function UserManagement() {
       width: 150,
     },
     {
+      title: '关联班级',
+      dataIndex: 'classes',
+      key: 'classes',
+      width: 200,
+      render: (classes: any[]) => {
+        if (!classes || classes.length === 0) return '-';
+        return (
+          <Space size={[0, 4]} wrap>
+            {classes.map((cls) => (
+              <Tag key={cls.id} color="blue">
+                {cls.name}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '关联学生',
+      dataIndex: 'parentProfile',
+      key: 'students',
+      width: 200,
+      render: (parentProfile: any) => {
+        if (!parentProfile?.students || parentProfile.students.length === 0) return '-';
+        return (
+          <Space size={[0, 4]} wrap>
+            {parentProfile.students.map((s: any) => (
+              <Tag key={s.student.id} color="green">
+                {s.student.name}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
       title: '手机号',
       dataIndex: 'phone',
       key: 'phone',
@@ -234,7 +296,7 @@ export default function UserManagement() {
       >
         <Alert
           message="说明"
-          description="用户管理用于添加和删除系统管理员或教师账号。教师数据已自动关联到现有教师信息。默认密码为 123456。"
+          description="用户管理用于添加和管理系统用户。教师用户可关联多个班级，家长用户可关联多个学生（孩子）。默认密码为 123456。"
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
@@ -245,7 +307,7 @@ export default function UserManagement() {
           dataSource={users}
           rowKey="id"
           loading={isLoading}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 1800 }}
           pagination={{
             pageSize: 20,
             showSizeChanger: true,
@@ -295,7 +357,13 @@ export default function UserManagement() {
             name="role"
             rules={[{ required: true, message: '请选择角色' }]}
           >
-            <Select placeholder="请选择角色">
+            <Select
+              placeholder="请选择角色"
+              onChange={() => {
+                // 切换角色时清空班级和学生选择
+                form.setFieldsValue({ classIds: [], studentIds: [] });
+              }}
+            >
               <Select.Option value="ADMIN">管理员</Select.Option>
               <Select.Option value="TEACHER">教师</Select.Option>
               <Select.Option value="PARENT">家长</Select.Option>
@@ -315,6 +383,49 @@ export default function UserManagement() {
               ))}
             </Select>
           </Form.Item>
+
+          {/* 教师角色：关联班级（多选） */}
+          {selectedRole === 'TEACHER' && (
+            <Form.Item label="关联班级" name="classIds">
+              <Select
+                mode="multiple"
+                placeholder="请选择教师所带班级（可多选）"
+                allowClear
+              >
+                {classesList.map((cls: any) => (
+                  <Select.Option key={cls.id} value={cls.id}>
+                    {cls.name} ({cls.grade})
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
+
+          {/* 家长角色：关联学生（多选） */}
+          {selectedRole === 'PARENT' && (
+            <Form.Item
+              label="关联学生"
+              name="studentIds"
+              rules={[{ required: true, message: '家长用户必须关联至少一个学生' }]}
+            >
+              <Select
+                mode="multiple"
+                placeholder="请选择关联的学生（可多选）"
+                allowClear
+                showSearch
+                optionFilterProp="children"
+                filterOption={(input, option) =>
+                  (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
+                }
+              >
+                {studentsList.map((student: any) => (
+                  <Select.Option key={student.id} value={student.id}>
+                    {student.name} - {student.class?.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
 
           <Form.Item label="手机号" name="phone">
             <Input placeholder="请输入手机号" />
