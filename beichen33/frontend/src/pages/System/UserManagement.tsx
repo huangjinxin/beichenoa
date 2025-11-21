@@ -14,6 +14,7 @@ import {
   Card,
   Row,
   Col,
+  Statistic,
 } from 'antd';
 import {
   PlusOutlined,
@@ -22,19 +23,31 @@ import {
   StopOutlined,
   CheckCircleOutlined,
   SearchOutlined,
+  UserOutlined,
+  TeamOutlined,
+  ClockCircleOutlined,
+  CheckOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userApi, campusApi, classApi } from '../../services/api';
+import { useAuthStore } from '../../store/auth';
 import dayjs from 'dayjs';
 
 const { TabPane } = Tabs;
 
 export default function UserManagement() {
-  const [activeTab, setActiveTab] = useState('admin');
+  const [activeTab, setActiveTab] = useState('pending');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [form] = Form.useForm();
+  const [approveForm] = Form.useForm();
+  const [rejectForm] = Form.useForm();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
 
   // 搜索和筛选状态
   const [searchText, setSearchText] = useState('');
@@ -43,6 +56,19 @@ export default function UserManagement() {
 
   // 监听表单中的校区字段变化
   const selectedCampusId = Form.useWatch('campusId', form);
+  const approveCampusId = Form.useWatch('campusId', approveForm);
+
+  // 获取统计数据
+  const { data: statisticsData } = useQuery({
+    queryKey: ['user-statistics'],
+    queryFn: () => userApi.getStatistics(),
+  });
+
+  // 获取待审核用户列表
+  const { data: pendingUsersData, isLoading: isPendingLoading } = useQuery({
+    queryKey: ['pending-users'],
+    queryFn: () => userApi.getPending(),
+  });
 
   // 获取用户列表
   const { data: usersData, isLoading } = useQuery({
@@ -62,6 +88,8 @@ export default function UserManagement() {
     queryFn: () => classApi.getAll(),
   });
 
+  const statistics = statisticsData?.data || {};
+  const pendingUsers = pendingUsersData?.data || [];
   const users = usersData?.data || [];
   const campusList = campusData || [];
   const classesList = classesData || [];
@@ -87,6 +115,14 @@ export default function UserManagement() {
       cls.campusId === filterCampusId || cls.campus?.id === filterCampusId
     );
   }, [filterCampusId, classesList]);
+
+  // 审核表单的班级列表
+  const approveClassesList = useMemo(() => {
+    if (!approveCampusId) return [];
+    return classesList.filter((cls: any) =>
+      cls.campusId === approveCampusId || cls.campus?.id === approveCampusId
+    );
+  }, [approveCampusId, classesList]);
 
   // 分类统计用户（带搜索和筛选）
   const userStats = useMemo(() => {
@@ -180,6 +216,39 @@ export default function UserManagement() {
     },
   });
 
+  // 审核通过
+  const approveMutation = useMutation({
+    mutationFn: ({ id, data }: any) => userApi.approve(id, data),
+    onSuccess: () => {
+      message.success('审核通过成功');
+      queryClient.invalidateQueries({ queryKey: ['pending-users'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['user-statistics'] });
+      setIsApproveModalOpen(false);
+      setSelectedUser(null);
+      approveForm.resetFields();
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || '审核失败');
+    },
+  });
+
+  // 拒绝注册
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, data }: any) => userApi.reject(id, data),
+    onSuccess: () => {
+      message.success('已拒绝该用户注册');
+      queryClient.invalidateQueries({ queryKey: ['pending-users'] });
+      queryClient.invalidateQueries({ queryKey: ['user-statistics'] });
+      setIsRejectModalOpen(false);
+      setSelectedUser(null);
+      rejectForm.resetFields();
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || '操作失败');
+    },
+  });
+
   const handleAdd = () => {
     setEditingUser(null);
     form.resetFields();
@@ -224,6 +293,48 @@ export default function UserManagement() {
       classIds,
     });
     setIsModalOpen(true);
+  };
+
+  const handleApprove = (record: any) => {
+    setSelectedUser(record);
+    approveForm.resetFields();
+    setIsApproveModalOpen(true);
+  };
+
+  const handleReject = (record: any) => {
+    setSelectedUser(record);
+    rejectForm.resetFields();
+    setIsRejectModalOpen(true);
+  };
+
+  const handleApproveSubmit = async () => {
+    try {
+      const values = await approveForm.validateFields();
+      approveMutation.mutate({
+        id: selectedUser.id,
+        data: {
+          ...values,
+          adminId: currentUser?.id,
+        },
+      });
+    } catch (error) {
+      console.error('表单验证失败:', error);
+    }
+  };
+
+  const handleRejectSubmit = async () => {
+    try {
+      const values = await rejectForm.validateFields();
+      rejectMutation.mutate({
+        id: selectedUser.id,
+        data: {
+          adminId: currentUser?.id,
+          note: values.note,
+        },
+      });
+    } catch (error) {
+      console.error('表单验证失败:', error);
+    }
   };
 
   const handleToggleStatus = (record: any) => {
@@ -281,6 +392,85 @@ export default function UserManagement() {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
+  const getApprovalStatusTag = (status: string) => {
+    const statusMap: Record<string, { color: string; text: string }> = {
+      PENDING: { color: 'gold', text: '待审核' },
+      APPROVED: { color: 'success', text: '已通过' },
+      REJECTED: { color: 'error', text: '已拒绝' },
+    };
+    const config = statusMap[status] || statusMap.PENDING;
+    return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  // 待审核用户Tab列定义
+  const pendingColumns = [
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      key: 'name',
+      width: 120,
+    },
+    {
+      title: '身份证号',
+      dataIndex: 'idCard',
+      key: 'idCard',
+      width: 180,
+    },
+    {
+      title: '性别',
+      dataIndex: 'gender',
+      key: 'gender',
+      width: 80,
+      render: (gender: string) => gender === 'MALE' ? '男' : gender === 'FEMALE' ? '女' : '-',
+    },
+    {
+      title: '出生日期',
+      dataIndex: 'birthDate',
+      key: 'birthDate',
+      width: 120,
+      render: (date: string) => date ? dayjs(date).format('YYYY-MM-DD') : '-',
+    },
+    {
+      title: '手机号',
+      dataIndex: 'phone',
+      key: 'phone',
+      width: 130,
+    },
+    {
+      title: '注册时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 180,
+      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 180,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            type="primary"
+            size="small"
+            icon={<CheckOutlined />}
+            onClick={() => handleApprove(record)}
+          >
+            审核通过
+          </Button>
+          <Button
+            danger
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={() => handleReject(record)}
+          >
+            拒绝
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
   // 教联体（管理员）Tab列定义
   const adminColumns = [
     {
@@ -308,6 +498,13 @@ export default function UserManagement() {
       key: 'campus',
       width: 120,
       render: (text: string) => text || '-',
+    },
+    {
+      title: '审核状态',
+      dataIndex: 'approvalStatus',
+      key: 'approvalStatus',
+      width: 100,
+      render: (status: string) => status ? getApprovalStatusTag(status) : getApprovalStatusTag('APPROVED'),
     },
     {
       title: '状态',
@@ -398,6 +595,13 @@ export default function UserManagement() {
         const totalStudents = classes.reduce((sum, cls) => sum + (cls._count?.students || 0), 0);
         return totalStudents;
       },
+    },
+    {
+      title: '审核状态',
+      dataIndex: 'approvalStatus',
+      key: 'approvalStatus',
+      width: 100,
+      render: (status: string) => status ? getApprovalStatusTag(status) : getApprovalStatusTag('APPROVED'),
     },
     {
       title: '状态',
@@ -514,6 +718,13 @@ export default function UserManagement() {
       },
     },
     {
+      title: '审核状态',
+      dataIndex: 'approvalStatus',
+      key: 'approvalStatus',
+      width: 100,
+      render: (status: string) => status ? getApprovalStatusTag(status) : getApprovalStatusTag('APPROVED'),
+    },
+    {
       title: '状态',
       dataIndex: 'isActive',
       key: 'isActive',
@@ -554,6 +765,84 @@ export default function UserManagement() {
 
   return (
     <div style={{ padding: '24px' }}>
+      {/* 统计卡片 */}
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="总用户数"
+              value={statistics.totalUsers || 0}
+              prefix={<UserOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="待审核用户"
+              value={statistics.pendingUsers || 0}
+              prefix={<ClockCircleOutlined />}
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="已审核通过"
+              value={statistics.approvedUsers || 0}
+              prefix={<CheckCircleOutlined />}
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="已拒绝用户"
+              value={statistics.rejectedUsers || 0}
+              prefix={<CloseOutlined />}
+              valueStyle={{ color: '#ff4d4f' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 按角色统计 */}
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        <Col span={8}>
+          <Card>
+            <Statistic
+              title="教师用户"
+              value={statistics.teacherUsers || 0}
+              prefix={<TeamOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card>
+            <Statistic
+              title="家长用户"
+              value={statistics.parentUsers || 0}
+              prefix={<TeamOutlined />}
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card>
+            <Statistic
+              title="管理员"
+              value={statistics.adminUsers || 0}
+              prefix={<TeamOutlined />}
+              valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
       <Card title="用户管理">
         {/* 搜索和筛选栏 */}
         <Row gutter={16} style={{ marginBottom: 16 }}>
@@ -608,6 +897,21 @@ export default function UserManagement() {
         </Row>
 
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
+          <TabPane tab={`待审核用户 (${pendingUsers.length})`} key="pending">
+            <Table
+              columns={pendingColumns}
+              dataSource={pendingUsers}
+              rowKey="id"
+              loading={isPendingLoading}
+              scroll={{ x: 1200 }}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+              }}
+            />
+          </TabPane>
+
           <TabPane tab={`教联体 (${userStats.admin.length})`} key="admin">
             <div style={{ marginBottom: 16 }}>
               <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
@@ -742,19 +1046,17 @@ export default function UserManagement() {
             <Input placeholder="请输入手机号" />
           </Form.Item>
 
-          {!editingUser && (
-            <Form.Item
-              label="角色"
-              name="role"
-              rules={[{ required: true, message: '请选择角色' }]}
-            >
-              <Select placeholder="请选择角色">
-                <Select.Option value="ADMIN">教联体</Select.Option>
-                <Select.Option value="TEACHER">教师</Select.Option>
-                <Select.Option value="PARENT">学生家长</Select.Option>
-              </Select>
-            </Form.Item>
-          )}
+          <Form.Item
+            label="角色"
+            name="role"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select placeholder="请选择角色" disabled={!!editingUser && editingUser.sourceType === 'STUDENT'}>
+              <Select.Option value="ADMIN">管理员</Select.Option>
+              <Select.Option value="TEACHER">教师</Select.Option>
+              <Select.Option value="PARENT">家长</Select.Option>
+            </Select>
+          </Form.Item>
 
           <Form.Item
             label="所属校区"
@@ -810,6 +1112,120 @@ export default function UserManagement() {
               <Select.Option value={true}>启用</Select.Option>
               <Select.Option value={false}>禁用</Select.Option>
             </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 审核通过Modal */}
+      <Modal
+        title="审核通过"
+        open={isApproveModalOpen}
+        onOk={handleApproveSubmit}
+        onCancel={() => {
+          setIsApproveModalOpen(false);
+          setSelectedUser(null);
+          approveForm.resetFields();
+        }}
+        width={600}
+        confirmLoading={approveMutation.isPending}
+      >
+        <Form form={approveForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="待审核用户信息">
+            <div style={{ padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+              <p><strong>姓名：</strong>{selectedUser?.name}</p>
+              <p><strong>身份证号：</strong>{selectedUser?.idCard}</p>
+              <p><strong>手机号：</strong>{selectedUser?.phone}</p>
+            </div>
+          </Form.Item>
+
+          <Form.Item
+            label="分配角色"
+            name="role"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select placeholder="请选择角色">
+              <Select.Option value="TEACHER">教师</Select.Option>
+              <Select.Option value="PARENT">家长</Select.Option>
+              <Select.Option value="ADMIN">管理员</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="所属校区"
+            name="campusId"
+            rules={[{ required: true, message: '请选择所属校区' }]}
+          >
+            <Select
+              placeholder="请选择所属校区"
+              onChange={() => {
+                approveForm.setFieldsValue({ classIds: [] });
+              }}
+            >
+              {campusList.map((campus: any) => (
+                <Select.Option key={campus.id} value={campus.id}>
+                  {campus.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          {approveForm.getFieldValue('role') === 'TEACHER' && (
+            <Form.Item label="关联班级" name="classIds">
+              <Select
+                mode="multiple"
+                placeholder="请选择教师所带班级（可多选）"
+                allowClear
+                disabled={!approveCampusId}
+              >
+                {approveClassesList.map((cls: any) => (
+                  <Select.Option key={cls.id} value={cls.id}>
+                    {cls.name} ({cls.grade})
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
+
+          <Form.Item label="备注" name="note">
+            <Input.TextArea
+              placeholder="填写审核备注（可选）"
+              rows={4}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 拒绝注册Modal */}
+      <Modal
+        title="拒绝注册"
+        open={isRejectModalOpen}
+        onOk={handleRejectSubmit}
+        onCancel={() => {
+          setIsRejectModalOpen(false);
+          setSelectedUser(null);
+          rejectForm.resetFields();
+        }}
+        width={600}
+        confirmLoading={rejectMutation.isPending}
+      >
+        <Form form={rejectForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="待审核用户信息">
+            <div style={{ padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+              <p><strong>姓名：</strong>{selectedUser?.name}</p>
+              <p><strong>身份证号：</strong>{selectedUser?.idCard}</p>
+              <p><strong>手机号：</strong>{selectedUser?.phone}</p>
+            </div>
+          </Form.Item>
+
+          <Form.Item
+            label="拒绝原因"
+            name="note"
+            rules={[{ required: true, message: '请填写拒绝原因' }]}
+          >
+            <Input.TextArea
+              placeholder="请详细说明拒绝原因，该信息将通知给用户"
+              rows={6}
+            />
           </Form.Item>
         </Form>
       </Modal>
