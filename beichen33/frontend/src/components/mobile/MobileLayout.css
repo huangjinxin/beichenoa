@@ -1,0 +1,22 @@
+.mobile-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f5f5f5;
+}
+
+.mobile-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 50px;
+}
+
+.mobile-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+}

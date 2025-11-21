@@ -109,7 +109,7 @@ model User {
   password  String
   name      String
   phone     String?
-  idCard    String?
+  idCard    String?   // 身份证号，可用于登录（暂不设唯一约束，避免迁移冲突）
   role      UserRole
   avatar    String?
   isActive  Boolean   @default(true)
@@ -144,12 +144,15 @@ model User {
   dutyReports       DutyReport[]       @relation("DutyReportLeader")
   approvalTasks     ApprovalTask[]
   transferredTasks  ApprovalTask[]     @relation("TransferredTasks")
+  attendanceRecords AttendanceRecord[] @relation("AttendanceRecordCreator")
+  studentAttendances Attendance[]
 
   @@index([email])
   @@index([role])
   @@index([campusId])
   @@index([positionId])
   @@index([employmentStatus])
+  @@index([idCard])
 }
 
 model Student {
@@ -916,4 +919,79 @@ model DutyReport {
   @@index([date])
   @@index([campusId])
   @@index([dutyLeaderId])
+}
+
+// ==================== 移动端相关模型 ====================
+
+// 考勤状态枚举
+enum AttendanceStatus {
+  PRESENT   // 到校
+  ABSENT    // 缺勤
+  LATE      // 迟到
+  LEAVE     // 请假
+}
+
+// 考勤记录批次（一次点名）
+model AttendanceRecord {
+  id          String   @id @default(uuid())
+  date        DateTime // 考勤日期
+  classId     String   // 班级ID
+
+  createdBy   String   // 创建人（教师）
+  creator     User     @relation("AttendanceRecordCreator", fields: [createdBy], references: [id])
+
+  attendances Attendance[] // 该批次的所有考勤记录
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date, classId])
+  @@index([createdBy])
+}
+
+// 学生考勤记录
+model Attendance {
+  id        String   @id @default(uuid())
+
+  recordId  String   // 考勤批次ID
+  record    AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  studentId String   // 学生ID
+  status    AttendanceStatus @default(PRESENT) // 考勤状态
+  note      String?  // 备注
+
+  createdBy String   // 记录人（教师）
+  creator   User     @relation(fields: [createdBy], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([recordId])
+  @@index([studentId])
+  @@index([status])
+}
+
+// 公告
+model Announcement {
+  id          String   @id @default(uuid())
+  title       String   // 标题
+  content     String   @db.Text // 内容
+  type        String   @default("general") // 类型：general/urgent/event
+  priority    Int      @default(0) // 优先级（数字越大越靠前）
+
+  campusId    String?  // 园区ID（为空表示全校公告）
+  classIds    String[] // 目标班级ID列表（为空表示全校）
+
+  publishedAt DateTime? // 发布时间
+  expiredAt   DateTime? // 过期时间
+
+  isActive    Boolean  @default(true) // 是否生效
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
+  @@index([campusId])
+  @@index([type])
+  @@index([isActive])
 }

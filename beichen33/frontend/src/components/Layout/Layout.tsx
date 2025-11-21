@@ -99,6 +99,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       icon: <SettingOutlined />,
       label: '系统配置',
       children: [
+        { key: '/system/users', icon: <UserOutlined />, label: '用户管理' },
         { key: '/system/api', icon: <ApiOutlined />, label: 'API文档' },
       ],
     },

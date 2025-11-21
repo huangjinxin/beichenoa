@@ -36,7 +36,7 @@ publicApi.interceptors.response.use(
 );
 
 export const authApi = {
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
+  login: (identifier: string, password: string) => api.post('/auth/login', { identifier, password }),
   register: (data: any) => api.post('/auth/register', data),
 };
 
@@ -259,6 +259,25 @@ export const dutyReportApi = {
   create: (data: any) => api.post('/records/duty-report', data),
   update: (id: string, data: any) => api.put(`/records/duty-report/${id}`, data),
   delete: (id: string) => api.delete(`/records/duty-report/${id}`),
+};
+
+// 考勤记录 API
+export const attendanceApi = {
+  createRecord: (data: any) => api.post('/attendance/record', data),
+  getByClassAndDate: (classId: string, date: string) => api.get(`/attendance/class/${classId}/date/${date}`),
+  getRecords: (params?: any) => api.get('/attendance/records', { params }),
+  getStudentHistory: (studentId: string, params?: any) => api.get(`/attendance/student/${studentId}/history`, { params }),
+  updateAttendance: (id: string, data: { status: string; note?: string }) => api.patch(`/attendance/${id}`, data),
+};
+
+// 公告 API
+export const announcementApi = {
+  getAll: (params?: any) => api.get('/announcements', { params }),
+  getMy: () => api.get('/announcements/my'),
+  getOne: (id: string) => api.get(`/announcements/${id}`),
+  create: (data: any) => api.post('/announcements', data),
+  update: (id: string, data: any) => api.patch(`/announcements/${id}`, data),
+  delete: (id: string) => api.delete(`/announcements/${id}`),
 };
 
 export default api;

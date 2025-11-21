@@ -1,0 +1,40 @@
+.teacher-home {
+  padding: 12px;
+}
+
+.user-info-card {
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.user-info-card .adm-card-body {
+  padding: 16px;
+}
+
+.user-name {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.user-role {
+  margin-bottom: 4px;
+}
+
+.user-campus {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.todo-card {
+  margin-bottom: 12px;
+}
+
+.announcement-card {
+  margin-bottom: 12px;
+}
+
+.announcement-card .adm-list-item-content {
+  font-size: 15px;
+}

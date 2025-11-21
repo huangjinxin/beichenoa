@@ -27,9 +27,9 @@ export class AuthController {
   }
 
   @Post('login')
-  @ApiOperation({ summary: 'User login' })
-  login(@Body() body: { email: string; password: string }) {
-    return this.authService.login(body.email, body.password);
+  @ApiOperation({ summary: 'User login (支持邮箱或身份证号)' })
+  login(@Body() body: { identifier: string; password: string }) {
+    return this.authService.login(body.identifier, body.password);
   }
 
   @Post('register')

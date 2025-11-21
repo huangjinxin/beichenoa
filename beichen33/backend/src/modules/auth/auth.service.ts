@@ -10,14 +10,23 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async login(email: string, password: string) {
+  async login(identifier: string, password: string) {
     try {
-      console.log('[AUTH] Login attempt:', { email });
+      console.log('[AUTH] Login attempt:', { identifier });
 
-      const user = await this.prisma.user.findUnique({
-        where: { email },
-        include: { campus: true, position: true },
+      // 支持邮箱或身份证号登录
+      let user = await this.prisma.user.findUnique({
+        where: { email: identifier },
+        include: { campus: true, position: true, classes: true },
       });
+
+      // 如果邮箱未找到，尝试使用身份证号查找
+      if (!user && identifier) {
+        user = await this.prisma.user.findFirst({
+          where: { idCard: identifier },
+          include: { campus: true, position: true, classes: true },
+        });
+      }
 
       console.log('[AUTH] User found:', user ? `${user.email} (${user.id})` : 'NOT FOUND');
 
@@ -44,6 +53,7 @@ export class AuthService {
           role: user.role,
           campus: user.campus,
           position: user.position,
+          classes: user.classes, // 返回教师所带班级
         },
       };
     } catch (error) {

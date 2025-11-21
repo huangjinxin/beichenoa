@@ -35,6 +35,15 @@ import DutyReportEdit from './pages/Records/DutyReport/Edit';
 import DutyReportDetail from './pages/Records/DutyReport/Detail';
 import RecordsQuery from './pages/Records/Query';
 import ApiDoc from './pages/System/ApiDoc';
+import UserManagement from './pages/System/UserManagement';
+
+// 移动端页面
+import TeacherHome from './pages/mobile/teacher/Home';
+import TeacherAttendance from './pages/mobile/teacher/Attendance';
+import TeacherDaily from './pages/mobile/teacher/Daily';
+import TeacherForms from './pages/mobile/teacher/Forms';
+import TeacherProfile from './pages/mobile/teacher/Profile';
+
 import { useAuthStore } from './store/auth';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -42,11 +51,28 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return token ? <Layout>{children}</Layout> : <Navigate to="/login" />;
 }
 
+// 移动端路由守卫
+function MobileRoute({ children }: { children: React.ReactNode }) {
+  const { token } = useAuthStore();
+  return token ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
 function App() {
   return (
     <Routes>
+      {/* 登录页面 - 统一入口 */}
       <Route path="/login" element={<Login />} />
+      <Route path="/m/login" element={<Navigate to="/login" replace />} />
       <Route path="/forms/share/:token" element={<ShareForm />} />
+
+      {/* 移动端教师路由 */}
+      <Route path="/teacher/home" element={<MobileRoute><TeacherHome /></MobileRoute>} />
+      <Route path="/teacher/attendance" element={<MobileRoute><TeacherAttendance /></MobileRoute>} />
+      <Route path="/teacher/daily" element={<MobileRoute><TeacherDaily /></MobileRoute>} />
+      <Route path="/teacher/forms" element={<MobileRoute><TeacherForms /></MobileRoute>} />
+      <Route path="/teacher/profile" element={<MobileRoute><TeacherProfile /></MobileRoute>} />
+
+      {/* 管理员桌面端路由 */}
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/students" element={<PrivateRoute><StudentList /></PrivateRoute>} />
       <Route path="/students/:id" element={<PrivateRoute><StudentDetail /></PrivateRoute>} />
@@ -80,6 +106,7 @@ function App() {
       <Route path="/records/duty-report/edit/:id" element={<PrivateRoute><DutyReportEdit /></PrivateRoute>} />
       <Route path="/records/duty-report/:id" element={<PrivateRoute><DutyReportDetail /></PrivateRoute>} />
       <Route path="/records/query" element={<PrivateRoute><RecordsQuery /></PrivateRoute>} />
+      <Route path="/system/users" element={<PrivateRoute><UserManagement /></PrivateRoute>} />
       <Route path="/system/api" element={<PrivateRoute><ApiDoc /></PrivateRoute>} />
     </Routes>
   );
