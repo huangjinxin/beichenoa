@@ -36,6 +36,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
+            export PATH="/usr/local/bin:$PATH"
             cd "/Users/beichentech/Documents/bc-web/北辰online/workspace/beichenoa"
             git pull origin main
             cd beichen33
