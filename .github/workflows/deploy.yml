@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
@@ -25,10 +25,8 @@ jobs:
           echo "Waiting for Tailscale to be ready..."
           sleep 5
           tailscale status
-          echo "Testing connectivity to ${{ secrets.SSH_HOST }}..."
-          ping -c 3 ${{ secrets.SSH_HOST }} || echo "Ping failed, but SSH might still work"
 
-      - name: Deploy to server via SSH
+      - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -37,11 +35,21 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             export PATH="/usr/local/bin:$PATH"
+
+            # 修改成你服务器真实路径
             cd "/Users/beichentech/Documents/bc-web/北辰online/workspace/beichenoa"
+
+
             git pull origin main
-            cd beichen33
-            docker compose down
-            docker compose build --no-cache
-            docker compose up -d
-            sleep 5
+
+            # 执行后端迁移（非常重要）
+            cd beichen33/backend
+            npm install --omit=dev
+            npx prisma migrate deploy
+            cd ../..
+
+            # 无停机部署
+            docker compose pull
+            docker compose up -d --build
+
             docker compose ps
