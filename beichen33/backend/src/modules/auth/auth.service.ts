@@ -17,12 +17,13 @@ export class AuthService {
    * @returns 拼音全拼（小写，无空格）
    */
   private nameToPinyin(name: string): string {
+    // @ts-ignore
     const pinyinArray = pinyin(name, {
-      style: pinyin.STYLE_NORMAL,
+      style: 'normal',
       heteronym: false,
     });
     // 拼接所有拼音，转小写
-    return pinyinArray.map(item => item[0]).join('').toLowerCase();
+    return pinyinArray.map((item: any) => item[0]).join('').toLowerCase();
   }
 
   /**

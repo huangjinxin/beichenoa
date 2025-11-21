@@ -836,7 +836,7 @@ export class EntityBindingService {
             const result = await this.createEntityFromInputField(
               field.entityType,
               entityData,
-              submission.user?.campusId
+              submission.user?.campusId || undefined
             );
 
             // 记录关联
