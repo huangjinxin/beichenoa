@@ -51,6 +51,7 @@ async function main() {
       campusId: campus.id,
       positionId: principal.id,
       employmentStatus: 'ACTIVE',
+      approvalStatus: 'APPROVED',
     },
   });
 
@@ -66,6 +67,7 @@ async function main() {
       campusId: campus.id,
       positionId: teacherPosition.id,
       employmentStatus: 'ACTIVE',
+      approvalStatus: 'APPROVED',
     },
   });
 
@@ -81,6 +83,7 @@ async function main() {
       campusId: campus.id,
       positionId: teacherPosition.id,
       employmentStatus: 'ACTIVE',
+      approvalStatus: 'APPROVED',
     },
   });
 
