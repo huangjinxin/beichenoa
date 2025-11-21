@@ -25,8 +25,10 @@ jobs:
           echo "Waiting for Tailscale to be ready..."
           sleep 5
           tailscale status
+          echo "Testing connectivity to ${{ secrets.SSH_HOST }}..."
+          ping -c 3 ${{ secrets.SSH_HOST }} || echo "Ping failed, but SSH might still work"
 
-      - name: Deploy to server
+      - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -36,19 +38,23 @@ jobs:
           script: |
             export PATH="/usr/local/bin:$PATH"
 
-            # 这是你 macOS 服务器上的真实路径
+            # 进入项目目录
             cd "/Users/beichentech/Documents/bc-web/北辰online/workspace/beichenoa"
 
+            # 拉取最新代码
             git pull origin main
 
-            # 执行后端数据库迁移（非常关键）
-            cd beichen33/backend
-            npm install --omit=dev
-            npx prisma migrate deploy
-            cd ../..
+            # 进入 beichen33 目录（包含 docker-compose.yml）
+            cd beichen33
 
-            # 无停机部署
-            docker compose pull
-            docker compose up -d --build
+            # 停止并重新构建容器
+            # Prisma 迁移会在容器启动时自动运行（见 docker-compose.yml）
+            docker compose down
+            docker compose build --no-cache
+            docker compose up -d
 
+            # 等待容器启动
+            sleep 5
+
+            # 显示容器状态
             docker compose ps
