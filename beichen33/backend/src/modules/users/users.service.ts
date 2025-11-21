@@ -102,7 +102,9 @@ export class UsersService {
       data: {
         approvalStatus: 'APPROVED',
         role: data.role as any,
-        campusId: data.campusId,
+        campus: {
+          connect: { id: data.campusId },
+        },
         approvedBy: data.adminId,
         approvedAt: new Date(),
         approvalNote: data.note,
@@ -208,9 +210,29 @@ export class UsersService {
     if (data.password) {
       data.password = await bcrypt.hash(data.password, 10);
     }
+
+    // 处理关系字段
+    const updateData: any = { ...data };
+    if (data.campusId !== undefined) {
+      delete updateData.campusId;
+      if (data.campusId) {
+        updateData.campus = { connect: { id: data.campusId } };
+      } else {
+        updateData.campus = { disconnect: true };
+      }
+    }
+    if (data.positionId !== undefined) {
+      delete updateData.positionId;
+      if (data.positionId) {
+        updateData.position = { connect: { id: data.positionId } };
+      } else {
+        updateData.position = { disconnect: true };
+      }
+    }
+
     return this.prisma.user.update({
       where: { id },
-      data,
+      data: updateData,
       select: {
         id: true,
         email: true,
