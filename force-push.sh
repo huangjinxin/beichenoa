@@ -44,6 +44,52 @@ else
 fi
 echo ""
 
+# ========================================
+# Prisma 开发规范提示（强制）
+# ========================================
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}⚠️  Prisma 开发规范（必读）${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${RED}⚠️  核心规则：${NC}"
+echo -e "   修改 ${BLUE}schema.prisma${NC} 后，${RED}必须${NC}创建迁移文件！"
+echo ""
+echo -e "${GREEN}✅ 正确做法：${NC}"
+echo -e "   ${BLUE}cd beichen33/backend${NC}"
+echo -e "   ${BLUE}npx prisma migrate dev --name 描述_字段名${NC}"
+echo ""
+echo -e "${RED}❌ 禁止使用：${NC}"
+echo -e "   ${RED}npx prisma db push${NC}  ${RED}# 不生成迁移文件，服务端无法同步！${NC}"
+echo ""
+echo -e "${YELLOW}📋 完整流程：${NC}"
+echo -e "   1. 修改 schema.prisma"
+echo -e "   2. 运行 ${BLUE}npx prisma migrate dev --name xxx${NC}"
+echo -e "   3. ${BLUE}git add prisma/${NC}"
+echo -e "   4. ${BLUE}git commit && git push${NC}"
+echo ""
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# 强制确认
+read -p "$(echo -e ${YELLOW}如果你修改了 schema.prisma，是否已创建迁移文件？[y/N]: ${NC})" -n 1 -r
+echo ""
+echo ""
+
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${RED}❌ 请先创建 Prisma 迁移文件再推送！${NC}"
+    echo ""
+    echo -e "${BLUE}💡 快速操作：${NC}"
+    echo -e "   ${BLUE}cd beichen33/backend${NC}"
+    echo -e "   ${BLUE}npx prisma migrate dev --name 你的描述${NC}"
+    echo -e "   ${BLUE}cd ../..${NC}"
+    echo -e "   ${BLUE}./force-push.sh${NC}"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✅ 已确认 Prisma 规范${NC}"
+echo ""
+
 # 步骤 2: 询问用户确认
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${YELLOW}⚠️  步骤 2/4: 确认操作${NC}"

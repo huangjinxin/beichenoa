@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
+  Tabs,
   Table,
   Button,
   Space,
@@ -11,21 +12,37 @@ import {
   message,
   Popconfirm,
   Card,
-  Alert,
+  Row,
+  Col,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  EditOutlined,
+  LockOutlined,
+  StopOutlined,
+  CheckCircleOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userApi, campusApi, classApi, studentApi } from '../../services/api';
+import { userApi, campusApi, classApi } from '../../services/api';
 import dayjs from 'dayjs';
 
+const { TabPane } = Tabs;
+
 export default function UserManagement() {
+  const [activeTab, setActiveTab] = useState('admin');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
 
-  // 监听表单中的角色字段变化
-  const selectedRole = Form.useWatch('role', form) || '';
+  // 搜索和筛选状态
+  const [searchText, setSearchText] = useState('');
+  const [filterCampusId, setFilterCampusId] = useState<string>('');
+  const [filterClassId, setFilterClassId] = useState<string>('');
+
+  // 监听表单中的校区字段变化
+  const selectedCampusId = Form.useWatch('campusId', form);
 
   // 获取用户列表
   const { data: usersData, isLoading } = useQuery({
@@ -45,16 +62,94 @@ export default function UserManagement() {
     queryFn: () => classApi.getAll(),
   });
 
-  // 获取学生列表
-  const { data: studentsData } = useQuery({
-    queryKey: ['students'],
-    queryFn: () => studentApi.getAll(),
-  });
-
   const users = usersData?.data || [];
   const campusList = campusData || [];
   const classesList = classesData || [];
-  const studentsList = studentsData?.data || [];
+
+  // 根据校区ID找到校区名称
+  const getCampusName = (campusId: string) => {
+    const campus = campusList.find((c: any) => c.id === campusId);
+    return campus?.name || '';
+  };
+
+  // 根据选中的校区过滤班级列表
+  const filteredClassesList = useMemo(() => {
+    if (!selectedCampusId) return classesList;
+    return classesList.filter((cls: any) =>
+      cls.campusId === selectedCampusId || cls.campus?.id === selectedCampusId
+    );
+  }, [selectedCampusId, classesList]);
+
+  // 筛选器的班级列表（用于筛选条）
+  const filterClassesList = useMemo(() => {
+    if (!filterCampusId) return classesList;
+    return classesList.filter((cls: any) =>
+      cls.campusId === filterCampusId || cls.campus?.id === filterCampusId
+    );
+  }, [filterCampusId, classesList]);
+
+  // 分类统计用户（带搜索和筛选）
+  const userStats = useMemo(() => {
+    const filterUsers = (userList: any[]) => {
+      return userList.filter((u: any) => {
+        // 搜索过滤
+        const matchSearch = !searchText ||
+          u.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+          u.email?.toLowerCase().includes(searchText.toLowerCase()) ||
+          u.phone?.includes(searchText);
+
+        // 校区过滤
+        const matchCampus = !filterCampusId || u.campusId === filterCampusId;
+
+        // 班级过滤
+        const matchClass = !filterClassId ||
+          u.classes?.some((cls: any) => cls.id === filterClassId);
+
+        return matchSearch && matchCampus && matchClass;
+      });
+    };
+
+    const stats = {
+      admin: filterUsers(users.filter((u: any) => u.role === 'ADMIN')),
+      beichen1: filterUsers(users.filter((u: any) => {
+        const campusName = getCampusName(u.campusId);
+        return u.role === 'TEACHER' && (campusName.includes('北辰核心') || campusName === '北辰幼儿园');
+      })),
+      beichen2: filterUsers(users.filter((u: any) => {
+        const campusName = getCampusName(u.campusId);
+        return u.role === 'TEACHER' && (campusName.includes('三岔路') || campusName === '北辰二幼');
+      })),
+      beichen3: filterUsers(users.filter((u: any) => {
+        const campusName = getCampusName(u.campusId);
+        return u.role === 'TEACHER' && (campusName.includes('彭家山') || campusName === '北辰三幼');
+      })),
+      parent: filterUsers(users.filter((u: any) => u.role === 'PARENT')),
+    };
+    return stats;
+  }, [users, campusList, searchText, filterCampusId, filterClassId]);
+
+  // 禁用/启用用户
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }: any) => userApi.update(id, { isActive }),
+    onSuccess: () => {
+      message.success('状态更新成功');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || '操作失败');
+    },
+  });
+
+  // 重置密码
+  const resetPasswordMutation = useMutation({
+    mutationFn: (id: string) => userApi.update(id, { password: '123456' }),
+    onSuccess: () => {
+      message.success('密码已重置为 123456');
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || '重置失败');
+    },
+  });
 
   // 创建用户
   const createMutation = useMutation({
@@ -85,45 +180,58 @@ export default function UserManagement() {
     },
   });
 
-  // 删除用户
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => userApi.delete(id),
-    onSuccess: () => {
-      message.success('用户删除成功');
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-    },
-    onError: (error: any) => {
-      message.error(error.response?.data?.message || '删除失败');
-    },
-  });
-
   const handleAdd = () => {
     setEditingUser(null);
     form.resetFields();
+    // 根据当前Tab设置默认角色和校区
+    if (activeTab === 'admin') {
+      form.setFieldsValue({ role: 'ADMIN' });
+    } else if (activeTab.startsWith('beichen')) {
+      form.setFieldsValue({ role: 'TEACHER' });
+      // 根据Tab设置对应的校区
+      const campusMap: any = {
+        beichen1: campusList.find((c: any) => c.name === '北辰幼儿园')?.id,
+        beichen2: campusList.find((c: any) => c.name === '北辰二幼')?.id,
+        beichen3: campusList.find((c: any) => c.name === '北辰三幼')?.id,
+      };
+      const campusId = campusMap[activeTab];
+      if (campusId) {
+        form.setFieldsValue({ campusId });
+      }
+    }
     setIsModalOpen(true);
   };
 
   const handleEdit = (record: any) => {
+    // 检查是否为同步用户
+    if (record.sourceType === 'STUDENT') {
+      Modal.info({
+        title: '提示',
+        content: '该账号从学生管理同步而来，核心信息请到"学生管理"页面修改。这里只能修改账号状态和密码。',
+        okText: '知道了',
+      });
+      return;
+    }
+
     setEditingUser(record);
-
-    // 提取班级ID列表
     const classIds = record.classes?.map((c: any) => c.id) || [];
-
-    // 提取学生ID列表（从家长档案中获取）
-    const studentIds = record.parentProfile?.students?.map((s: any) => s.student.id) || [];
-
     form.setFieldsValue({
-      ...record,
+      name: record.name,
+      email: record.email,
+      phone: record.phone,
+      role: record.role,
       campusId: record.campus?.id,
       classIds,
-      studentIds,
-      password: undefined, // 编辑时不显示密码
     });
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    deleteMutation.mutate(id);
+  const handleToggleStatus = (record: any) => {
+    toggleStatusMutation.mutate({ id: record.id, isActive: !record.isActive });
+  };
+
+  const handleResetPassword = (id: string) => {
+    resetPasswordMutation.mutate(id);
   };
 
   const handleSubmit = async () => {
@@ -138,6 +246,10 @@ export default function UserManagement() {
       if (editingUser) {
         updateMutation.mutate({ id: editingUser.id, data: values });
       } else {
+        // 新增时，如果没有设置密码，使用默认密码
+        if (!values.password) {
+          values.password = '123456';
+        }
         createMutation.mutate(values);
       }
     } catch (error) {
@@ -145,14 +257,10 @@ export default function UserManagement() {
     }
   };
 
-  const getRoleTag = (role: string) => {
-    const roleMap: Record<string, { color: string; text: string }> = {
-      ADMIN: { color: 'red', text: '管理员' },
-      TEACHER: { color: 'blue', text: '教师' },
-      PARENT: { color: 'green', text: '家长' },
-    };
-    const config = roleMap[role] || { color: 'default', text: role };
-    return <Tag color={config.color}>{config.text}</Tag>;
+  const handleClearFilters = () => {
+    setSearchText('');
+    setFilterCampusId('');
+    setFilterClassId('');
   };
 
   const getStatusTag = (isActive: boolean) => {
@@ -163,7 +271,18 @@ export default function UserManagement() {
     );
   };
 
-  const columns = [
+  const getSourceTag = (sourceType: string) => {
+    const sourceMap: Record<string, { color: string; text: string }> = {
+      MANUAL: { color: 'blue', text: '手动创建' },
+      STUDENT: { color: 'green', text: '学生同步' },
+      TEACHER_SYNC: { color: 'orange', text: '教师同步' },
+    };
+    const config = sourceMap[sourceType] || sourceMap.MANUAL;
+    return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  // 教联体（管理员）Tab列定义
+  const adminColumns = [
     {
       title: '姓名',
       dataIndex: 'name',
@@ -171,24 +290,24 @@ export default function UserManagement() {
       width: 120,
     },
     {
-      title: '邮箱',
+      title: '账号',
       dataIndex: 'email',
       key: 'email',
       width: 200,
     },
     {
-      title: '身份证号',
-      dataIndex: 'idCard',
-      key: 'idCard',
-      width: 180,
+      title: '手机号',
+      dataIndex: 'phone',
+      key: 'phone',
+      width: 130,
       render: (text: string) => text || '-',
     },
     {
-      title: '角色',
-      dataIndex: 'role',
-      key: 'role',
-      width: 100,
-      render: (role: string) => getRoleTag(role),
+      title: '所属校区',
+      dataIndex: ['campus', 'name'],
+      key: 'campus',
+      width: 120,
+      render: (text: string) => text || '-',
     },
     {
       title: '状态',
@@ -198,13 +317,61 @@ export default function UserManagement() {
       render: (isActive: boolean) => getStatusTag(isActive),
     },
     {
-      title: '所属校区',
-      dataIndex: ['campus', 'name'],
-      key: 'campus',
-      width: 150,
+      title: '操作',
+      key: 'action',
+      width: 250,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={record.isActive ? <StopOutlined /> : <CheckCircleOutlined />}
+            onClick={() => handleToggleStatus(record)}
+            danger={record.isActive}
+          >
+            {record.isActive ? '禁用' : '启用'}
+          </Button>
+          <Popconfirm
+            title="重置密码"
+            description="确定要将密码重置为 123456 吗？"
+            onConfirm={() => handleResetPassword(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="link" size="small" icon={<LockOutlined />}>
+              重置密码
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  // 校区Tab列定义（教师）
+  const teacherColumns = [
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      key: 'name',
+      width: 120,
     },
     {
-      title: '关联班级',
+      title: '账号',
+      dataIndex: 'email',
+      key: 'email',
+      width: 200,
+    },
+    {
+      title: '所属班级',
       dataIndex: 'classes',
       key: 'classes',
       width: 200,
@@ -222,10 +389,89 @@ export default function UserManagement() {
       },
     },
     {
-      title: '关联学生',
-      dataIndex: 'parentProfile',
-      key: 'students',
+      title: '学生数量',
+      dataIndex: 'classes',
+      key: 'studentCount',
+      width: 100,
+      render: (classes: any[]) => {
+        if (!classes || classes.length === 0) return 0;
+        const totalStudents = classes.reduce((sum, cls) => sum + (cls._count?.students || 0), 0);
+        return totalStudents;
+      },
+    },
+    {
+      title: '状态',
+      dataIndex: 'isActive',
+      key: 'isActive',
+      width: 80,
+      render: (isActive: boolean) => getStatusTag(isActive),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 250,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={record.isActive ? <StopOutlined /> : <CheckCircleOutlined />}
+            onClick={() => handleToggleStatus(record)}
+            danger={record.isActive}
+          >
+            {record.isActive ? '禁用' : '启用'}
+          </Button>
+          <Popconfirm
+            title="重置密码"
+            description="确定要将密码重置为 123456 吗？"
+            onConfirm={() => handleResetPassword(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="link" size="small" icon={<LockOutlined />}>
+              重置密码
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  // 学生家长Tab列定义
+  const parentColumns = [
+    {
+      title: '家长姓名',
+      dataIndex: 'name',
+      key: 'name',
+      width: 120,
+    },
+    {
+      title: '账号',
+      dataIndex: 'email',
+      key: 'email',
       width: 200,
+    },
+    {
+      title: '来源',
+      dataIndex: 'sourceType',
+      key: 'sourceType',
+      width: 100,
+      render: (sourceType: string) => getSourceTag(sourceType || 'MANUAL'),
+    },
+    {
+      title: '孩子姓名',
+      dataIndex: 'parentProfile',
+      key: 'children',
+      width: 150,
       render: (parentProfile: any) => {
         if (!parentProfile?.students || parentProfile.students.length === 0) return '-';
         return (
@@ -240,43 +486,65 @@ export default function UserManagement() {
       },
     },
     {
-      title: '手机号',
-      dataIndex: 'phone',
-      key: 'phone',
-      width: 130,
-      render: (text: string) => text || '-',
+      title: '所属校区',
+      dataIndex: ['campus', 'name'],
+      key: 'campus',
+      width: 120,
     },
     {
-      title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      width: 170,
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm'),
+      title: '所属班级',
+      dataIndex: 'parentProfile',
+      key: 'classes',
+      width: 150,
+      render: (parentProfile: any) => {
+        if (!parentProfile?.students || parentProfile.students.length === 0) return '-';
+        const classes = parentProfile.students.map((s: any) => s.student.class);
+        const uniqueClasses = Array.from(new Set(classes.map((c: any) => c?.id)))
+          .map(id => classes.find((c: any) => c?.id === id))
+          .filter(Boolean);
+        return (
+          <Space size={[0, 4]} wrap>
+            {uniqueClasses.map((cls: any) => (
+              <Tag key={cls.id} color="blue">
+                {cls.name}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '状态',
+      dataIndex: 'isActive',
+      key: 'isActive',
+      width: 80,
+      render: (isActive: boolean) => getStatusTag(isActive),
     },
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 200,
       fixed: 'right' as const,
       render: (_: any, record: any) => (
         <Space>
           <Button
             type="link"
             size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
+            icon={record.isActive ? <StopOutlined /> : <CheckCircleOutlined />}
+            onClick={() => handleToggleStatus(record)}
+            danger={record.isActive}
           >
-            编辑
+            {record.isActive ? '禁用' : '启用'}
           </Button>
           <Popconfirm
-            title="确认删除"
-            description="确定要删除这个用户吗？"
-            onConfirm={() => handleDelete(record.id)}
+            title="重置密码"
+            description="确定要将密码重置为 123456 吗？"
+            onConfirm={() => handleResetPassword(record.id)}
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
+            <Button type="link" size="small" icon={<LockOutlined />}>
+              重置密码
             </Button>
           </Popconfirm>
         </Space>
@@ -286,36 +554,158 @@ export default function UserManagement() {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card
-        title="用户管理"
-        extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            添加用户
-          </Button>
-        }
-      >
-        <Alert
-          message="说明"
-          description="用户管理用于添加和管理系统用户。教师用户可关联多个班级，家长用户可关联多个学生（孩子）。默认密码为 123456。"
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
+      <Card title="用户管理">
+        {/* 搜索和筛选栏 */}
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={6}>
+            <Input
+              placeholder="搜索姓名、账号、手机号"
+              prefix={<SearchOutlined />}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              allowClear
+            />
+          </Col>
+          <Col span={6}>
+            <Select
+              placeholder="筛选校区"
+              style={{ width: '100%' }}
+              value={filterCampusId || undefined}
+              onChange={(value) => {
+                setFilterCampusId(value || '');
+                setFilterClassId(''); // 清空班级筛选
+              }}
+              allowClear
+            >
+              {campusList.map((campus: any) => (
+                <Select.Option key={campus.id} value={campus.id}>
+                  {campus.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col span={6}>
+            <Select
+              placeholder="筛选班级"
+              style={{ width: '100%' }}
+              value={filterClassId || undefined}
+              onChange={(value) => setFilterClassId(value || '')}
+              allowClear
+              disabled={!filterCampusId}
+            >
+              {filterClassesList.map((cls: any) => (
+                <Select.Option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col span={6}>
+            <Space>
+              <Button onClick={handleClearFilters}>清空筛选</Button>
+            </Space>
+          </Col>
+        </Row>
 
-        <Table
-          columns={columns}
-          dataSource={users}
-          rowKey="id"
-          loading={isLoading}
-          scroll={{ x: 1800 }}
-          pagination={{
-            pageSize: 20,
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-          }}
-        />
+        <Tabs activeKey={activeTab} onChange={setActiveTab}>
+          <TabPane tab={`教联体 (${userStats.admin.length})`} key="admin">
+            <div style={{ marginBottom: 16 }}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                添加教联体账号
+              </Button>
+            </div>
+            <Table
+              columns={adminColumns}
+              dataSource={userStats.admin}
+              rowKey="id"
+              loading={isLoading}
+              scroll={{ x: 1200 }}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+              }}
+            />
+          </TabPane>
+
+          <TabPane tab={`北辰核心园 (${userStats.beichen1.length})`} key="beichen1">
+            <div style={{ marginBottom: 16 }}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                添加教师
+              </Button>
+            </div>
+            <Table
+              columns={teacherColumns}
+              dataSource={userStats.beichen1}
+              rowKey="id"
+              loading={isLoading}
+              scroll={{ x: 1400 }}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+              }}
+            />
+          </TabPane>
+
+          <TabPane tab={`三岔路分园 (${userStats.beichen2.length})`} key="beichen2">
+            <div style={{ marginBottom: 16 }}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                添加教师
+              </Button>
+            </div>
+            <Table
+              columns={teacherColumns}
+              dataSource={userStats.beichen2}
+              rowKey="id"
+              loading={isLoading}
+              scroll={{ x: 1400 }}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+              }}
+            />
+          </TabPane>
+
+          <TabPane tab={`彭家山幼儿园 (${userStats.beichen3.length})`} key="beichen3">
+            <div style={{ marginBottom: 16 }}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                添加教师
+              </Button>
+            </div>
+            <Table
+              columns={teacherColumns}
+              dataSource={userStats.beichen3}
+              rowKey="id"
+              loading={isLoading}
+              scroll={{ x: 1400 }}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+              }}
+            />
+          </TabPane>
+
+          <TabPane tab={`学生家长 (${userStats.parent.length})`} key="parent">
+            <Table
+              columns={parentColumns}
+              dataSource={userStats.parent}
+              rowKey="id"
+              loading={isLoading}
+              scroll={{ x: 1400 }}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+              }}
+            />
+          </TabPane>
+        </Tabs>
       </Card>
 
+      {/* 编辑/新增用户Modal */}
       <Modal
         title={editingUser ? '编辑用户' : '添加用户'}
         open={isModalOpen}
@@ -345,37 +735,39 @@ export default function UserManagement() {
               { type: 'email', message: '请输入有效的邮箱地址' },
             ]}
           >
-            <Input placeholder="请输入邮箱（登录凭证）" disabled={!!editingUser} />
+            <Input placeholder="请输入邮箱（登录账号）" disabled={!!editingUser} />
           </Form.Item>
 
-          <Form.Item label="身份证号" name="idCard">
-            <Input placeholder="可用于登录（选填）" />
+          <Form.Item label="手机号" name="phone">
+            <Input placeholder="请输入手机号" />
           </Form.Item>
 
-          <Form.Item
-            label="角色"
-            name="role"
-            rules={[{ required: true, message: '请选择角色' }]}
-          >
-            <Select
-              placeholder="请选择角色"
-              onChange={() => {
-                // 切换角色时清空班级和学生选择
-                form.setFieldsValue({ classIds: [], studentIds: [] });
-              }}
+          {!editingUser && (
+            <Form.Item
+              label="角色"
+              name="role"
+              rules={[{ required: true, message: '请选择角色' }]}
             >
-              <Select.Option value="ADMIN">管理员</Select.Option>
-              <Select.Option value="TEACHER">教师</Select.Option>
-              <Select.Option value="PARENT">家长</Select.Option>
-            </Select>
-          </Form.Item>
+              <Select placeholder="请选择角色">
+                <Select.Option value="ADMIN">教联体</Select.Option>
+                <Select.Option value="TEACHER">教师</Select.Option>
+                <Select.Option value="PARENT">学生家长</Select.Option>
+              </Select>
+            </Form.Item>
+          )}
 
           <Form.Item
             label="所属校区"
             name="campusId"
             rules={[{ required: true, message: '请选择所属校区' }]}
           >
-            <Select placeholder="请选择所属校区">
+            <Select
+              placeholder="请选择所属校区"
+              onChange={() => {
+                // 切换校区时清空班级选择
+                form.setFieldsValue({ classIds: [] });
+              }}
+            >
               {campusList.map((campus: any) => (
                 <Select.Option key={campus.id} value={campus.id}>
                   {campus.name}
@@ -384,15 +776,15 @@ export default function UserManagement() {
             </Select>
           </Form.Item>
 
-          {/* 教师角色：关联班级（多选） */}
-          {selectedRole === 'TEACHER' && (
+          {(editingUser?.role === 'TEACHER' || form.getFieldValue('role') === 'TEACHER') && (
             <Form.Item label="关联班级" name="classIds">
               <Select
                 mode="multiple"
                 placeholder="请选择教师所带班级（可多选）"
                 allowClear
+                disabled={!selectedCampusId}
               >
-                {classesList.map((cls: any) => (
+                {filteredClassesList.map((cls: any) => (
                   <Select.Option key={cls.id} value={cls.id}>
                     {cls.name} ({cls.grade})
                   </Select.Option>
@@ -400,36 +792,6 @@ export default function UserManagement() {
               </Select>
             </Form.Item>
           )}
-
-          {/* 家长角色：关联学生（多选） */}
-          {selectedRole === 'PARENT' && (
-            <Form.Item
-              label="关联学生"
-              name="studentIds"
-              rules={[{ required: true, message: '家长用户必须关联至少一个学生' }]}
-            >
-              <Select
-                mode="multiple"
-                placeholder="请选择关联的学生（可多选）"
-                allowClear
-                showSearch
-                optionFilterProp="children"
-                filterOption={(input, option) =>
-                  (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
-                }
-              >
-                {studentsList.map((student: any) => (
-                  <Select.Option key={student.id} value={student.id}>
-                    {student.name} - {student.class?.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
-
-          <Form.Item label="手机号" name="phone">
-            <Input placeholder="请输入手机号" />
-          </Form.Item>
 
           <Form.Item
             label="密码"

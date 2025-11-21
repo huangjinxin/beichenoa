@@ -13,6 +13,12 @@ enum UserRole {
   PARENT
 }
 
+enum UserSourceType {
+  MANUAL      // 手动创建
+  STUDENT     // 从学生同步
+  TEACHER_SYNC // 从教师同步（预留）
+}
+
 enum RecordType {
   LEARNING
   LIFE
@@ -123,6 +129,10 @@ model User {
   bankName    String?   // 开户行详细信息
   workplace   String?   @default("北辰幼儿园") // 工作单位
 
+  // 数据同步来源
+  sourceType  UserSourceType @default(MANUAL)  // 账号来源类型
+  sourceId    String?                          // 来源记录ID（Student ID 或 Teacher ID）
+
   campusId  String
   campus    Campus    @relation("CampusUsers", fields: [campusId], references: [id])
 
@@ -154,6 +164,8 @@ model User {
   @@index([positionId])
   @@index([employmentStatus])
   @@index([idCard])
+  @@index([sourceType])
+  @@index([sourceId])
 }
 
 model Student {
