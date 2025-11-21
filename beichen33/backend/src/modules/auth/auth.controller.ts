@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../prisma.service';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -33,8 +34,8 @@ export class AuthController {
   }
 
   @Post('register')
-  @ApiOperation({ summary: 'User registration' })
-  register(@Body() body: { email: string; password: string; name: string; role: string }) {
-    return this.authService.register(body.email, body.password, body.name, body.role);
+  @ApiOperation({ summary: '用户自助注册（待审核）' })
+  register(@Body() body: RegisterDto) {
+    return this.authService.register(body);
   }
 }

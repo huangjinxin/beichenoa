@@ -115,14 +115,20 @@ model User {
   password  String
   name      String
   phone     String?
-  idCard    String?   // 身份证号，可用于登录（暂不设唯一约束，避免迁移冲突）
-  role      UserRole
+  idCard    String?   @unique  // 身份证号，设为唯一防止重复注册
+  role      UserRole? // 角色改为可选，注册时不需要，审核时分配
   avatar    String?
   isActive  Boolean   @default(true)
   gender    String?
   birthday  DateTime?
   hireDate  DateTime?
   resignationDate DateTime?
+
+  // 审核状态
+  approvalStatus ApprovalStatus @default(PENDING)  // 注册审核状态
+  approvalNote   String?                           // 审核备注/拒绝原因
+  approvedAt     DateTime?                         // 审核通过时间
+  approvedBy     String?                           // 审核人ID
 
   // 银行信息
   bankAccount String?   // 银行卡号
@@ -133,8 +139,8 @@ model User {
   sourceType  UserSourceType @default(MANUAL)  // 账号来源类型
   sourceId    String?                          // 来源记录ID（Student ID 或 Teacher ID）
 
-  campusId  String
-  campus    Campus    @relation("CampusUsers", fields: [campusId], references: [id])
+  campusId  String?   // 改为可选，注册时可能还未分配
+  campus    Campus?   @relation("CampusUsers", fields: [campusId], references: [id])
 
   positionId String?
   position   Position? @relation(fields: [positionId], references: [id])
@@ -166,6 +172,8 @@ model User {
   @@index([idCard])
   @@index([sourceType])
   @@index([sourceId])
+  @@index([approvalStatus])
+  @@index([approvedBy])
 }
 
 model Student {

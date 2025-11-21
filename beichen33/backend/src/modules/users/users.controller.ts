@@ -39,4 +39,34 @@ export class UsersController {
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
+
+  @Get('pending/list')
+  @ApiOperation({ summary: '获取待审核用户列表' })
+  findPending() {
+    return this.usersService.findPendingUsers();
+  }
+
+  @Get('statistics/summary')
+  @ApiOperation({ summary: '获取用户统计数据' })
+  getStatistics() {
+    return this.usersService.getStatistics();
+  }
+
+  @Post(':id/approve')
+  @ApiOperation({ summary: '审核通过用户' })
+  approveUser(
+    @Param('id') id: string,
+    @Body() data: { role: string; campusId: string; adminId: string; note?: string },
+  ) {
+    return this.usersService.approveUser(id, data);
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: '拒绝用户注册' })
+  rejectUser(
+    @Param('id') id: string,
+    @Body() data: { adminId: string; note: string },
+  ) {
+    return this.usersService.rejectUser(id, data);
+  }
 }
