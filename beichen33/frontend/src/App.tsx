@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard/Dashboard';
 import StudentList from './pages/Students/List';
 import StudentDetail from './pages/Students/Detail';
@@ -60,8 +61,9 @@ function MobileRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <Routes>
-      {/* 登录页面 - 统一入口 */}
+      {/* 登录注册页面 - 统一入口 */}
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/m/login" element={<Navigate to="/login" replace />} />
       <Route path="/forms/share/:token" element={<ShareForm />} />
 

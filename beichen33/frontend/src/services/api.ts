@@ -207,6 +207,13 @@ export const userApi = {
   create: (data: any) => api.post('/users', data),
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
+  // 审核相关
+  getPending: () => api.get('/users/pending/list'),
+  getStatistics: () => api.get('/users/statistics/summary'),
+  approve: (id: string, data: { role: string; campusId: string; adminId: string; note?: string }) =>
+    api.post(`/users/${id}/approve`, data),
+  reject: (id: string, data: { adminId: string; note: string }) =>
+    api.post(`/users/${id}/reject`, data),
 };
 
 export const campusApi = {

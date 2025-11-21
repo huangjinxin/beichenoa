@@ -117,6 +117,14 @@ export default function Login() {
         <div className="login-footer">
           <p>{t('menu.students').includes('学生') ? '默认密码：123456' : 'Default password: 123456'}</p>
           <p>{t('menu.students').includes('学生') ? '首次登录请修改密码' : 'Please change password after first login'}</p>
+          <p style={{ marginTop: '20px' }}>
+            <a
+              onClick={() => navigate('/register')}
+              style={{ color: '#1890ff', cursor: 'pointer' }}
+            >
+              {t('menu.students').includes('学生') ? '没有账号？立即注册' : 'No account? Register now'}
+            </a>
+          </p>
         </div>
       </div>
     </div>
