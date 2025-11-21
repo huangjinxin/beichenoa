@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout code
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
@@ -36,13 +36,12 @@ jobs:
           script: |
             export PATH="/usr/local/bin:$PATH"
 
-            # 修改成你服务器真实路径
+            # 这是你 macOS 服务器上的真实路径
             cd "/Users/beichentech/Documents/bc-web/北辰online/workspace/beichenoa"
-
 
             git pull origin main
 
-            # 执行后端迁移（非常重要）
+            # 执行后端数据库迁移（非常关键）
             cd beichen33/backend
             npm install --omit=dev
             npx prisma migrate deploy
