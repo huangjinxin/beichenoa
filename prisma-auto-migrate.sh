@@ -160,15 +160,11 @@ main() {
     print_info "生产环境迁移由 Docker 自动处理"
     echo ""
 
-    # 开发环境：检查是否需要创建迁移
-    if [ "$1" = "--force" ] || [ "$1" = "-f" ]; then
-        # 强制创建迁移
-        print_warning "强制创建迁移模式"
-        dev_migrate
-    else
-        # 自动检查
+    # 开发环境：默认强制创建迁移（AI 修改代码后检测不准确）
+    if [ "$1" = "--check" ] || [ "$1" = "-c" ]; then
+        # 检查模式：先检查再询问
+        print_info "检查模式：先检测 Schema 变更"
         if check_schema_changes; then
-            # 有变更，询问是否创建迁移
             echo ""
             print_warning "检测到 Schema 变更！"
             read -p "是否创建迁移文件? (y/n) " -n 1 -r
@@ -183,6 +179,12 @@ main() {
         else
             print_success "无需创建迁移文件"
         fi
+    else
+        # 默认模式：直接创建迁移（推荐）
+        print_warning "默认模式：强制创建迁移"
+        print_info "原因：AI 修改代码后，Prisma 检测不一定准确"
+        echo ""
+        dev_migrate
     fi
 
     echo ""
@@ -200,24 +202,25 @@ Prisma 自动迁移脚本（开发环境专用）
     $0 [选项]
 
 选项:
-    -f, --force     强制创建迁移文件（跳过检查）
+    -c, --check     检查模式：先检测变更再询问是否创建迁移
     -h, --help      显示此帮助信息
 
 功能:
-    - 检查 Prisma Schema 变更并创建迁移文件
+    - 默认：直接创建迁移文件（推荐，因为 AI 修改代码后检测不准）
     - 自动应用迁移到本地开发数据库
     - 提醒你提交迁移文件到 Git
 
 注意:
     - 生产环境的迁移由 Docker 容器自动处理（见 beichen33/docker-compose.yml）
     - 每次修改 schema.prisma 后都应该运行此脚本
+    - 默认行为：强制创建迁移（不检测，避免 AI 代码检测不准）
 
 示例:
-    # 修改 schema.prisma 后运行（推荐）
+    # 修改 schema.prisma 后直接运行（推荐）
     $0
 
-    # 强制创建迁移（跳过检查）
-    $0 --force
+    # 检查模式：先检测变更，再询问是否创建
+    $0 --check
 
     # 显示帮助信息
     $0 --help
