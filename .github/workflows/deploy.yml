@@ -21,7 +21,12 @@ jobs:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
       - name: Check Tailscale connection
-        run: tailscale status
+        run: |
+          echo "Waiting for Tailscale to be ready..."
+          sleep 5
+          tailscale status
+          echo "Testing connectivity to ${{ secrets.SSH_HOST }}..."
+          ping -c 3 ${{ secrets.SSH_HOST }} || echo "Ping failed, but SSH might still work"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
